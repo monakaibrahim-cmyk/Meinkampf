@@ -1,6 +1,6 @@
 {
   "name": "bedrock-qol-suite",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Modular, high-performance Quality-of-Life add-on suite for Minecraft Bedrock Edition.",
   "type": "module",
   "scripts": {
