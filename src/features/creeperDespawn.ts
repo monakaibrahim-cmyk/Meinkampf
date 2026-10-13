@@ -1,5 +1,6 @@
 import { world, system, Dimension } from "@minecraft/server";
 import { CreeperMorningDespawnConfig } from "../config";
+import { isPlayerNamedEntity } from "./mobHealthBar";
 
 /**
  * Initializes the Morning Creeper Despawn & Daylight Burning mechanic.
@@ -52,7 +53,7 @@ function checkAndDespawnCreepers(): void {
         if (!creeper.isValid) continue;
 
         // Keep player's pet / named creepers safe and extinguish any daylight fire
-        if (CreeperMorningDespawnConfig.protectNamedCreepers && creeper.nameTag && creeper.nameTag.length > 0) {
+        if (CreeperMorningDespawnConfig.protectNamedCreepers && isPlayerNamedEntity(creeper)) {
             try {
                 creeper.extinguishFire(true);
             } catch {}

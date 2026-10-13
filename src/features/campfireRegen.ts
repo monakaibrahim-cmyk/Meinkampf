@@ -1,5 +1,6 @@
 import {
     Block,
+    Dimension,
     Entity,
     EntityComponentTypes,
     EntityDamageCause,
@@ -10,7 +11,7 @@ import {
     world,
 } from "@minecraft/server";
 import { CampfireRegenConfig } from "../config";
-import { HOSTILE_MOBS, NEUTRAL_MOBS, PASSIVE_MOBS } from "./mobHealthBar";
+import { HOSTILE_MOBS, NEUTRAL_MOBS, PASSIVE_MOBS, isPlayerNamedEntity } from "./mobHealthBar";
 
 interface TrackedCampfireMob {
     entity: Entity;
@@ -25,14 +26,11 @@ const trackedCampfireHostiles = new Map<string, TrackedCampfireMob>();
 const mobLastRecordedHealth = new Map<string, number>();
 
 /**
- * Checks if an entity has been given a custom name tag by a player.
+ * Checks if an entity has been given a genuine custom name tag by a player.
+ * Uses isPlayerNamedEntity to correctly distinguish player-given names from generated UI tags.
  */
 export function isNamedEntity(entity: Entity): boolean {
-    try {
-        return Boolean(entity && entity.isValid && entity.nameTag && entity.nameTag.trim().length > 0);
-    } catch {
-        return false;
-    }
+    return isPlayerNamedEntity(entity);
 }
 
 interface KnownCampfire {
@@ -46,6 +44,7 @@ interface KnownCampfire {
 // High-speed in-memory registry of known placed and discovered campfires
 const knownCampfires = new Map<string, KnownCampfire>();
 const playerLastCampfireScanPos = new Map<string, { x: number; y: number; z: number }>();
+const playerLastCampfireScanTick = new Map<string, number>();
 
 /**
  * Checks if a block is a lit campfire or soul campfire.
@@ -70,22 +69,21 @@ export function isLitCampfire(block: Block): boolean {
 }
 
 /**
- * High-speed lookup for the nearest lit campfire within radius.
- * First checks known campfires in memory with pure vector math (0 block queries).
- * Only performs a localized discovery scan if the player moves into a completely new area.
+ * Finds all lit campfires within search radius of a location.
+ * Checks knownCampfires cache in memory with pure vector math (0 block queries).
+ * Scans locally if moving to a new area or periodically every 5 seconds if none cached.
  */
-export function findNearestLitCampfire(
-    dim: import("@minecraft/server").Dimension,
+export function findLitCampfiresAround(
+    dim: Dimension,
     pLoc: Vector3,
-    radius: number,
+    searchRadius: number,
     playerId?: string
-): Block | undefined {
-    const radiusSq = radius * radius;
-    let nearestBlock: Block | undefined;
-    let nearestDistSq = (radius + 1) * (radius + 1);
+): Block[] {
+    const radiusSq = searchRadius * searchRadius;
+    const foundCampfires: Block[] = [];
+    const deadKeys: string[] = [];
 
     // 1. Check knownCampfires cache in memory (vector math, ultra-fast)
-    const deadKeys: string[] = [];
     for (const [key, camp] of knownCampfires.entries()) {
         if (camp.dimensionId !== dim.id) continue;
         const distSq = (camp.x + 0.5 - pLoc.x) ** 2 + (camp.y + 0.5 - pLoc.y) ** 2 + (camp.z + 0.5 - pLoc.z) ** 2;
@@ -93,11 +91,8 @@ export function findNearestLitCampfire(
             try {
                 const b = dim.getBlock({ x: camp.x, y: camp.y, z: camp.z });
                 if (b && isLitCampfire(b)) {
-                    if (distSq < nearestDistSq) {
-                        nearestDistSq = distSq;
-                        nearestBlock = b;
-                    }
-                } else {
+                    foundCampfires.push(b);
+                } else if (b && b.typeId !== "minecraft:campfire" && b.typeId !== "minecraft:soul_campfire") {
                     deadKeys.push(key);
                 }
             } catch {
@@ -109,31 +104,44 @@ export function findNearestLitCampfire(
         knownCampfires.delete(k);
     }
 
-    if (nearestBlock) {
-        return nearestBlock;
+    if (foundCampfires.length > 0) {
+        return foundCampfires;
     }
 
-    // 2. If no campfire in cache, only scan if player moved significantly (>= 6 blocks)
+    // 2. Discovery scan throttling: only scan if player moved significantly (>= 6 blocks)
+    // or if at least 100 ticks (5 seconds) passed since last scan
     if (playerId) {
-        const last = playerLastCampfireScanPos.get(playerId);
-        if (last) {
-            const dx = pLoc.x - last.x;
-            const dy = pLoc.y - last.y;
-            const dz = pLoc.z - last.z;
-            if (dx * dx + dy * dy + dz * dz < 36) {
-                return undefined; // Stationary or small movement: skip expensive block scan
+        const lastPos = playerLastCampfireScanPos.get(playerId);
+        const lastTick = playerLastCampfireScanTick.get(playerId) ?? 0;
+        const currentTick = system.currentTick;
+        let shouldScan = true;
+
+        if (lastPos) {
+            const dx = pLoc.x - lastPos.x;
+            const dy = pLoc.y - lastPos.y;
+            const dz = pLoc.z - lastPos.z;
+            const movedDistSq = dx * dx + dy * dy + dz * dz;
+            const timedOut = currentTick - lastTick >= 100;
+            if (movedDistSq < 36 && !timedOut) {
+                shouldScan = false;
             }
         }
+
+        if (!shouldScan) {
+            return foundCampfires;
+        }
+
         playerLastCampfireScanPos.set(playerId, { x: pLoc.x, y: pLoc.y, z: pLoc.z });
+        playerLastCampfireScanTick.set(playerId, currentTick);
     }
 
-    // 3. One-off discovery scan: any discovered campfire is immediately added to knownCampfires
-    const minX = Math.floor(pLoc.x) - radius;
-    const maxX = Math.floor(pLoc.x) + radius;
-    const minY = Math.max(-64, Math.floor(pLoc.y) - 2);
-    const maxY = Math.min(320, Math.floor(pLoc.y) + 3);
-    const minZ = Math.floor(pLoc.z) - radius;
-    const maxZ = Math.floor(pLoc.z) + radius;
+    // 3. Local discovery scan: adds any discovered campfire to knownCampfires
+    const minX = Math.floor(pLoc.x) - searchRadius;
+    const maxX = Math.floor(pLoc.x) + searchRadius;
+    const minY = Math.max(-64, Math.floor(pLoc.y) - 6);
+    const maxY = Math.min(320, Math.floor(pLoc.y) + 6);
+    const minZ = Math.floor(pLoc.z) - searchRadius;
+    const maxZ = Math.floor(pLoc.z) + searchRadius;
 
     for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
@@ -145,19 +153,15 @@ export function findNearestLitCampfire(
                     const b = dim.getBlock({ x, y, z });
                     if (b && (b.typeId === "minecraft:campfire" || b.typeId === "minecraft:soul_campfire")) {
                         const key = `${dim.id}:${x},${y},${z}`;
-                        const lit = isLitCampfire(b);
-                        if (lit) {
-                            knownCampfires.set(key, {
-                                x,
-                                y,
-                                z,
-                                dimensionId: dim.id,
-                                isSoul: b.typeId === "minecraft:soul_campfire",
-                            });
-                            if (distSq < nearestDistSq) {
-                                nearestDistSq = distSq;
-                                nearestBlock = b;
-                            }
+                        knownCampfires.set(key, {
+                            x,
+                            y,
+                            z,
+                            dimensionId: dim.id,
+                            isSoul: b.typeId === "minecraft:soul_campfire",
+                        });
+                        if (isLitCampfire(b)) {
+                            foundCampfires.push(b);
                         }
                     }
                 } catch {
@@ -167,7 +171,39 @@ export function findNearestLitCampfire(
         }
     }
 
-    return nearestBlock;
+    return foundCampfires;
+}
+
+/**
+ * High-speed lookup for the nearest lit campfire within radius.
+ */
+export function findNearestLitCampfire(
+    dim: Dimension,
+    pLoc: Vector3,
+    radius: number,
+    playerId?: string
+): Block | undefined {
+    const campfires = findLitCampfiresAround(dim, pLoc, radius, playerId);
+    if (campfires.length === 0) return undefined;
+
+    let nearest = campfires[0];
+    let nearestDistSq =
+        (nearest.location.x + 0.5 - pLoc.x) ** 2 +
+        (nearest.location.y + 0.5 - pLoc.y) ** 2 +
+        (nearest.location.z + 0.5 - pLoc.z) ** 2;
+
+    for (let i = 1; i < campfires.length; i++) {
+        const c = campfires[i];
+        const distSq =
+            (c.location.x + 0.5 - pLoc.x) ** 2 +
+            (c.location.y + 0.5 - pLoc.y) ** 2 +
+            (c.location.z + 0.5 - pLoc.z) ** 2;
+        if (distSq < nearestDistSq) {
+            nearestDistSq = distSq;
+            nearest = c;
+        }
+    }
+    return nearest;
 }
 
 /**
@@ -202,7 +238,7 @@ function shouldHealMob(mobTypeId: string): boolean {
 }
 
 /**
- * Processes campfire health regeneration for all online players and their nearby pets, neutral, and passive mobs.
+ * Processes campfire health regeneration and hostile mob burning/defense for all active campfires.
  * Runs once per second (every 20 ticks) for authentic vanilla survival balance.
  */
 export function processCampfireRegeneration(): void {
@@ -212,10 +248,15 @@ export function processCampfireRegeneration(): void {
     if (players.length === 0) return;
 
     const radius = CampfireRegenConfig.radius;
+    const burnRadius = CampfireRegenConfig.burnHostilesRadius ?? 10;
+    const searchRadius = Math.max(radius, burnRadius) + 4;
     const baseHeal = CampfireRegenConfig.baseHealthPerSecond;
     const healedEntityIds = new Set<string>();
     const currentMobsInRange = new Set<string>();
     const damagedMobsThisCycle = new Set<string>();
+
+    // Collect all lit campfires in active range of any online player
+    const activeCampfires = new Map<string, { block: Block; dim: Dimension }>();
 
     for (const player of players) {
         if (!player || !player.isValid) continue;
@@ -223,61 +264,87 @@ export function processCampfireRegeneration(): void {
         try {
             const pLoc = player.location;
             const dim = player.dimension;
+            const nearbyCampfires = findLitCampfiresAround(dim, pLoc, searchRadius, player.id);
 
-            // Check if player is on fire (burning in flames)
-            const onFireComp = player.getComponent(EntityComponentTypes.OnFire);
-            if (onFireComp) {
-                continue; // Do not heal if player is actively burning
+            for (const camp of nearbyCampfires) {
+                const key = `${dim.id}:${camp.location.x},${camp.location.y},${camp.location.z}`;
+                if (!activeCampfires.has(key)) {
+                    activeCampfires.set(key, { block: camp, dim });
+                }
             }
 
-            // Search for nearest lit campfire using high-speed cached lookup
-            const nearestCampfire = findNearestLitCampfire(dim, pLoc, radius, player.id);
-            if (!nearestCampfire) continue;
+            // Find closest campfire to player for player warmth & regeneration
+            let playerNearestCamp: Block | undefined;
+            let playerMinDistSq = (radius + 1) * (radius + 1);
+            let hasNearbySoul = false;
 
-            // Calculate multiplier suited for vanilla
-            let multiplier = 1.0;
-
-            // Resting multiplier: player is sitting / crouching near the campfire
-            if (player.isSneaking) {
-                multiplier *= CampfireRegenConfig.restingMultiplier;
-            }
-
-            // Soul campfire multiplier: mystical blue flames grant healing bonus
-            if (nearestCampfire.typeId === "minecraft:soul_campfire") {
-                multiplier *= CampfireRegenConfig.soulCampfireMultiplier;
-            }
-
-            const healAmount = baseHeal * multiplier;
-
-            // Apply healing to player
-            const healthComp = player.getComponent(EntityComponentTypes.Health) as EntityHealthComponent | undefined;
-            if (healthComp && healthComp.currentValue < healthComp.effectiveMax) {
-                const newHp = Math.min(healthComp.effectiveMax, healthComp.currentValue + healAmount);
-                healthComp.setCurrentValue(newHp);
-
-                // Spawn warmth / healing heart particles
-                if (CampfireRegenConfig.showParticles) {
-                    try {
-                        dim.spawnParticle("minecraft:heart_particle", {
-                            x: pLoc.x + (Math.random() - 0.5) * 0.6,
-                            y: pLoc.y + 1.2 + Math.random() * 0.4,
-                            z: pLoc.z + (Math.random() - 0.5) * 0.6,
-                        });
-                    } catch {
-                        // Ignore
+            for (const camp of nearbyCampfires) {
+                const distSq =
+                    (camp.location.x + 0.5 - pLoc.x) ** 2 +
+                    (camp.location.y + 0.5 - pLoc.y) ** 2 +
+                    (camp.location.z + 0.5 - pLoc.z) ** 2;
+                if (distSq <= radius * radius) {
+                    if (distSq < playerMinDistSq) {
+                        playerMinDistSq = distSq;
+                        playerNearestCamp = camp;
+                    }
+                    if (camp.typeId === "minecraft:soul_campfire") {
+                        hasNearbySoul = true;
                     }
                 }
             }
 
-            // Heal nearby tamed pets, neutral mobs, and passive mobs
-            const shouldHealAnyMob =
-                CampfireRegenConfig.healPets ||
-                CampfireRegenConfig.healNeutralMobs ||
-                CampfireRegenConfig.healPassiveMobs;
+            // Apply player healing only if player is within campfire radius and NOT actively burning
+            if (playerNearestCamp) {
+                const onFireComp = player.getComponent(EntityComponentTypes.OnFire);
+                if (!onFireComp) {
+                    let multiplier = 1.0;
+                    if (player.isSneaking) {
+                        multiplier *= CampfireRegenConfig.restingMultiplier;
+                    }
+                    if (hasNearbySoul) {
+                        multiplier *= CampfireRegenConfig.soulCampfireMultiplier;
+                    }
 
-            if (shouldHealAnyMob && nearestCampfire) {
-                const firePos = nearestCampfire.location;
-                const cCenter: Vector3 = { x: firePos.x + 0.5, y: firePos.y + 0.5, z: firePos.z + 0.5 };
+                    const healAmount = baseHeal * multiplier;
+                    const healthComp = player.getComponent(EntityComponentTypes.Health) as EntityHealthComponent | undefined;
+                    if (healthComp && healthComp.currentValue < healthComp.effectiveMax) {
+                        const newHp = Math.min(healthComp.effectiveMax, healthComp.currentValue + healAmount);
+                        healthComp.setCurrentValue(newHp);
+
+                        if (CampfireRegenConfig.showParticles) {
+                            try {
+                                dim.spawnParticle("minecraft:heart_particle", {
+                                    x: pLoc.x + (Math.random() - 0.5) * 0.6,
+                                    y: pLoc.y + 1.2 + Math.random() * 0.4,
+                                    z: pLoc.z + (Math.random() - 0.5) * 0.6,
+                                });
+                            } catch {
+                                // Ignore
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {
+            // Ignore
+        }
+    }
+
+    // Now process all active campfires for mob healing & hostile defense
+    const shouldHealAnyMob =
+        CampfireRegenConfig.healPets ||
+        CampfireRegenConfig.healNeutralMobs ||
+        CampfireRegenConfig.healPassiveMobs;
+
+    for (const { block: campfire, dim } of activeCampfires.values()) {
+        try {
+            const firePos = campfire.location;
+            const cCenter: Vector3 = { x: firePos.x + 0.5, y: firePos.y + 0.5, z: firePos.z + 0.5 };
+            const isSoul = campfire.typeId === "minecraft:soul_campfire";
+
+            // 1. Heal nearby tamed pets, neutral mobs, and passive mobs
+            if (shouldHealAnyMob) {
                 try {
                     const nearbyEntities = dim.getEntities({
                         location: cCenter,
@@ -285,19 +352,18 @@ export function processCampfireRegeneration(): void {
                     });
 
                     for (const mob of nearbyEntities) {
-                        if (!mob || !mob.isValid || mob.id === player.id) continue;
+                        if (!mob || !mob.isValid || mob.typeId === "minecraft:player") continue;
                         if (healedEntityIds.has(mob.id)) continue;
 
                         if (shouldHealMob(mob.typeId)) {
                             healedEntityIds.add(mob.id);
 
-                            // Do not heal mob if it is actively burning
                             const mobOnFire = mob.getComponent(EntityComponentTypes.OnFire);
                             if (mobOnFire) continue;
 
                             const mobHealth = mob.getComponent(EntityComponentTypes.Health) as EntityHealthComponent | undefined;
                             if (mobHealth && mobHealth.currentValue < mobHealth.effectiveMax) {
-                                mobHealth.setCurrentValue(Math.min(mobHealth.effectiveMax, mobHealth.currentValue + healAmount));
+                                mobHealth.setCurrentValue(Math.min(mobHealth.effectiveMax, mobHealth.currentValue + baseHeal));
 
                                 if (CampfireRegenConfig.showParticles) {
                                     try {
@@ -314,15 +380,12 @@ export function processCampfireRegeneration(): void {
                         }
                     }
                 } catch {
-                    // Fallback
+                    // Ignore
                 }
             }
 
-            // Burn and debuff hostile mobs that venture within burnHostilesRadius of the lit campfire
-            if (CampfireRegenConfig.burnHostiles && nearestCampfire) {
-                const firePos = nearestCampfire.location;
-                const cCenter: Vector3 = { x: firePos.x + 0.5, y: firePos.y + 0.5, z: firePos.z + 0.5 };
-                const burnRadius = CampfireRegenConfig.burnHostilesRadius ?? 10;
+            // 2. Burn, damage, debuff, and repel hostile mobs inside burnHostilesRadius
+            if (CampfireRegenConfig.burnHostiles) {
                 const burnDuration = CampfireRegenConfig.burnHostileDurationSeconds ?? 3;
                 try {
                     const hostiles = dim.getEntities({
@@ -331,22 +394,21 @@ export function processCampfireRegeneration(): void {
                     });
 
                     for (const mob of hostiles) {
-                        if (!mob || !mob.isValid || mob.id === player.id) continue;
+                        if (!mob || !mob.isValid || mob.typeId === "minecraft:player") continue;
                         if (HOSTILE_MOBS.has(mob.typeId)) {
                             // Completely exempt named hostile mobs from campfire burning, damage, debuffs, and knockback
-                            if (CampfireRegenConfig.exemptNamedHostiles && isNamedEntity(mob)) {
+                            if (CampfireRegenConfig.exemptNamedHostiles && isPlayerNamedEntity(mob)) {
                                 continue;
                             }
 
                             currentMobsInRange.add(mob.id);
 
-                            // Continuously keep burning duration at full duration (3s) even while inside the radius
+                            // Continuously keep burning duration at full duration (3s) while inside radius
                             mob.setOnFire(burnDuration, true);
 
                             // Deal campfire damage indefinitely every second while inside the radius
                             if (!damagedMobsThisCycle.has(mob.id)) {
                                 damagedMobsThisCycle.add(mob.id);
-                                const isSoul = nearestCampfire.typeId === "minecraft:soul_campfire";
                                 const baseDmg = isSoul ? 2 : 1;
                                 try {
                                     mob.applyDamage(baseDmg, { cause: EntityDamageCause.campfire });
@@ -357,7 +419,6 @@ export function processCampfireRegeneration(): void {
 
                             // Apply balanced status debuffs to hostile mobs inside campfire radius
                             if (CampfireRegenConfig.debuffHostiles) {
-                                const isSoul = nearestCampfire.typeId === "minecraft:soul_campfire";
                                 const debuffTicks = (CampfireRegenConfig.debuffDurationSeconds ?? burnDuration) * 20;
 
                                 // 1. Slowness: slow movement speed (Slowness I for normal, Slowness II for soul)
@@ -433,7 +494,6 @@ export function processCampfireRegeneration(): void {
                                         if (healthComp) {
                                             const prevHp = mobLastRecordedHealth.get(mob.id);
                                             if (prevHp !== undefined && healthComp.currentValue > prevHp) {
-                                                // Suppress health regeneration by reverting to previous recorded health
                                                 healthComp.setCurrentValue(prevHp);
                                             } else {
                                                 mobLastRecordedHealth.set(mob.id, healthComp.currentValue);
@@ -444,7 +504,7 @@ export function processCampfireRegeneration(): void {
                                     }
                                 }
 
-                                // 5. Soul Campfire special: brief Blindness (2s) to disorient hostile mob targeting in mystic soul smoke
+                                // 5. Soul Campfire special: brief Blindness (2s) in soul smoke
                                 if (isSoul && CampfireRegenConfig.debuffSoulBlindness) {
                                     try {
                                         mob.addEffect("minecraft:blindness", 40, {
@@ -491,7 +551,7 @@ export function processCampfireRegeneration(): void {
                         }
                     }
                 } catch {
-                    // Ignore dimension error
+                    // Ignore
                 }
             }
         } catch {
@@ -501,7 +561,6 @@ export function processCampfireRegeneration(): void {
 
     // Check previously tracked hostiles: if they are now out of range from burnHostilesRadius,
     // apply lingering burn duration
-    const burnRadius = CampfireRegenConfig.burnHostilesRadius ?? 10;
     const lingerDuration = CampfireRegenConfig.burnHostileDurationSeconds ?? 3;
 
     for (const [mobId, tracked] of trackedCampfireHostiles.entries()) {
@@ -519,7 +578,7 @@ export function processCampfireRegeneration(): void {
             if (!mob || !mob.isValid) continue;
 
             // Check if mob was named in the interim
-            if (CampfireRegenConfig.exemptNamedHostiles && isNamedEntity(mob)) {
+            if (CampfireRegenConfig.exemptNamedHostiles && isPlayerNamedEntity(mob)) {
                 try {
                     mob.extinguishFire(true);
                 } catch {
@@ -587,7 +646,7 @@ export function initCampfireRegenFeature(): void {
             if (isCampfireCause || onCampfire) {
                 if (HOSTILE_MOBS.has(event.hurtEntity.typeId)) {
                     // Exempt named hostile mobs from campfire damage
-                    if (CampfireRegenConfig.exemptNamedHostiles && isNamedEntity(event.hurtEntity)) {
+                    if (CampfireRegenConfig.exemptNamedHostiles && isPlayerNamedEntity(event.hurtEntity)) {
                         event.cancel = true;
                         try {
                             event.hurtEntity.extinguishFire(true);
@@ -640,6 +699,7 @@ export function initCampfireRegenFeature(): void {
 
     world.afterEvents.playerLeave.subscribe((event) => {
         playerLastCampfireScanPos.delete(event.playerId);
+        playerLastCampfireScanTick.delete(event.playerId);
     });
 
     // 3. Run healing and burn loop every 20 ticks = 1 second
@@ -649,4 +709,3 @@ export function initCampfireRegenFeature(): void {
 
     console.warn("[CampfireRegen] Feature initialized successfully.");
 }
-
