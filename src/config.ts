@@ -1562,6 +1562,38 @@ export const DroppedItemOutlineConfig = {
     eyeHeightParticle: "minecraft:redstone_wire_dust_particle",
 
     /**
+     * Outline rendering method:
+     * - "overlay": Native 3D wireframe outline overlay via @minecraft/debug-utilities (clean, un-textured Java F3+B debug lines, zero particles).
+     * - "particle": Legacy fallback particle rendering.
+     * Default: "overlay"
+     */
+    renderMode: "overlay" as "overlay" | "particle",
+
+    /**
+     * RGBA color for the white wireframe AABB bounding box in overlay mode.
+     * Default: { red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 }
+     */
+    overlayBoxColor: { red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 },
+
+    /**
+     * RGBA color for the Java F3+B blue look vector line in overlay mode.
+     * Default: { red: 0.0, green: 0.45, blue: 1.0, alpha: 1.0 }
+     */
+    overlayLookVectorColor: { red: 0.0, green: 0.45, blue: 1.0, alpha: 1.0 },
+
+    /**
+     * RGBA color for the Java F3+B red eye-level line in overlay mode.
+     * Default: { red: 1.0, green: 0.1, blue: 0.1, alpha: 1.0 }
+     */
+    overlayEyeHeightColor: { red: 1.0, green: 0.1, blue: 0.1, alpha: 1.0 },
+
+    /**
+     * Length of the blue look vector in overlay mode (in blocks).
+     * Default: 0.45
+     */
+    lookVectorLength: 0.45,
+
+    /**
      * Search radius around players (in blocks) to render outlines and debug tags.
      * Keeps performance at 60+ FPS without scanning the entire world.
      * Default: 16 blocks
@@ -1593,7 +1625,7 @@ export const DroppedItemOutlineConfig = {
     showDespawnTimer: true,
 
     /**
-     * Color-code particle bounding boxes according to item rarity tiers when javaDebugStyle is false:
+     * Color-code particle/overlay bounding boxes according to item rarity tiers when javaDebugStyle is false:
      * - Legendary / Epic: Sculk Soul / Magenta
      * - Rare / Enchanted: Electric Spark / Cyan
      * - Uncommon: Wax Spark / Yellow
@@ -1603,7 +1635,7 @@ export const DroppedItemOutlineConfig = {
     colorByRarity: false,
 
     /**
-     * Default fallback particle for wireframe bounding boxes.
+     * Default fallback particle for wireframe bounding boxes in particle mode.
      * "minecraft:endrod" provides stationary, drift-free pure white points.
      * Default: "minecraft:endrod"
      */
