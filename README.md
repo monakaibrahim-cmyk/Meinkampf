@@ -121,7 +121,9 @@ Build artifacts are generated in [`dist/`](dist/):
 * **Dual-Channel Releases:**
   * `main` branch: Publishes production releases.
   * `development` branch: Generates preview Beta/Alpha pre-releases.
-* **Discord Integration:** Set repository secret `DISCORD_WEBHOOK` to receive rich notifications on commits, releases, and workflow check failures.
+* **Discord Integration:**
+  * **Dedicated Release Channel (`DISCORD_RELEASE_WEBHOOK`):** Set this repository secret to route release announcements to a specific Discord channel (e.g. `#releases` or `#announcements`). Releases automatically attach the compiled `.mcaddon` file and patch notes `.md` alongside a rich embed with inline notes.
+  * **Development Logs & Failures (`DISCORD_WEBHOOK` or `DISCORD_DEV_WEBHOOK`):** Routes commit notifications and CI check failure alerts to developer channels (e.g. `#dev-logs`). Also serves as a fallback for release announcements if no dedicated release webhook is set.
 
 ---
 

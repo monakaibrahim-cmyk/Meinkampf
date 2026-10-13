@@ -62,12 +62,14 @@ jobs:
         if: failure()
         run: node scripts/discord-notify.js failure
         env:
+          DISCORD_DEV_WEBHOOK: ${{ secrets.DISCORD_DEV_WEBHOOK }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
 
       - name: Notify Discord on commit push
         if: success() && github.event_name == 'push'
         run: node scripts/discord-notify.js commit
         env:
+          DISCORD_DEV_WEBHOOK: ${{ secrets.DISCORD_DEV_WEBHOOK }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
 
   release:
@@ -114,7 +116,9 @@ jobs:
         if: success()
         run: node scripts/discord-notify.js release
         env:
+          DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           RELEASE_TITLE: ${{ steps.meta.outputs.title }}
           IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}
+          CHANGELOG_PATH: ${{ steps.meta.outputs.changelog }}

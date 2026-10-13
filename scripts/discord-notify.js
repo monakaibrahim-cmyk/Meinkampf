@@ -1,25 +1,96 @@
 import { execSync } from "child_process";
-import { readFileSync, existsSync } from "fs";
-import { resolve, dirname } from "path";
+import { readFileSync, existsSync, readdirSync, statSync } from "fs";
+import { resolve, dirname, basename } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
+const distDir = resolve(rootDir, "dist");
 
 /**
- * Sends rich Discord notifications for repository events (commit, release, failure).
- * Exits gracefully without failing CI if DISCORD_WEBHOOK is not configured.
+ * Searches dist directory for the built .mcaddon file.
+ */
+function findMcAddonFile(targetVersion) {
+    if (!existsSync(distDir)) return null;
+
+    // 1. Check versioned subfolder: dist/v<version>/BedrockQoL_<version>.mcaddon
+    const versionDir = resolve(distDir, `v${targetVersion}`);
+    if (existsSync(versionDir)) {
+        const directMatch = resolve(versionDir, `BedrockQoL_${targetVersion}.mcaddon`);
+        if (existsSync(directMatch)) return directMatch;
+
+        const entries = readdirSync(versionDir);
+        const addon = entries.find((e) => e.endsWith(".mcaddon"));
+        if (addon) return resolve(versionDir, addon);
+    }
+
+    // 2. Scan entire dist directory recursively for any .mcaddon matching targetVersion
+    const queue = [distDir];
+    let fallbackAddon = null;
+
+    while (queue.length > 0) {
+        const curr = queue.shift();
+        const entries = readdirSync(curr, { withFileTypes: true });
+
+        for (const entry of entries) {
+            const fullPath = resolve(curr, entry.name);
+            if (entry.isDirectory()) {
+                queue.push(fullPath);
+            } else if (entry.isFile() && entry.name.endsWith(".mcaddon")) {
+                if (entry.name.includes(targetVersion)) {
+                    return fullPath;
+                }
+                if (!fallbackAddon) {
+                    fallbackAddon = fullPath;
+                }
+            }
+        }
+    }
+
+    return fallbackAddon;
+}
+
+/**
+ * Resolves the patch notes or changelog markdown file for the release.
+ */
+function findPatchNotesFile(targetVersion) {
+    if (process.env.CHANGELOG_PATH && existsSync(process.env.CHANGELOG_PATH)) {
+        return resolve(process.env.CHANGELOG_PATH);
+    }
+
+    const candidates = [
+        resolve(rootDir, `update/v${targetVersion}.md`),
+        resolve(rootDir, "prerelease_notes.md"),
+        resolve(rootDir, "release_notes.md"),
+        resolve(rootDir, "update/README.md")
+    ];
+
+    for (const cand of candidates) {
+        if (existsSync(cand)) return cand;
+    }
+
+    return null;
+}
+
+/**
+ * Sends rich Discord notifications with optional file attachments (for releases).
+ * Exits gracefully without failing CI if no webhook is configured.
  */
 async function sendDiscordNotification() {
-    const webhookUrl = process.env.DISCORD_WEBHOOK || "";
     const eventType = process.argv[2] || "commit";
 
+    // Allow dedicated release webhook channel (falling back to general webhook)
+    const webhookUrl = eventType === "release"
+        ? (process.env.DISCORD_RELEASE_WEBHOOK || process.env.DISCORD_WEBHOOK || "")
+        : (process.env.DISCORD_DEV_WEBHOOK || process.env.DISCORD_WEBHOOK || "");
+
     if (!webhookUrl) {
-        console.log(`[Discord Notify] DISCORD_WEBHOOK is not configured. Skipping '${eventType}' notification.`);
+        const targetEnv = eventType === "release" ? "DISCORD_RELEASE_WEBHOOK or DISCORD_WEBHOOK" : "DISCORD_WEBHOOK";
+        console.log(`[Discord Notify] ${targetEnv} is not configured. Skipping '${eventType}' notification.`);
         return;
     }
 
-    // Git / GitHub environment context
+    // Git and CI metadata
     const repo = process.env.GITHUB_REPOSITORY || "BedrockQoL";
     const refName = process.env.GITHUB_REF_NAME || getCurrentBranch();
     const sha = process.env.GITHUB_SHA || getCurrentCommitSha();
@@ -41,6 +112,7 @@ async function sendDiscordNotification() {
     const actionUrl = runId ? `${repoUrl}/actions/runs/${runId}` : `${repoUrl}/actions`;
 
     let embed = {};
+    const filesToAttach = [];
 
     switch (eventType) {
         case "commit": {
@@ -67,29 +139,104 @@ async function sendDiscordNotification() {
         }
 
         case "release": {
-            const tag = process.env.RELEASE_TAG || `v${version}`;
-            const title = process.env.RELEASE_TITLE || `Bedrock QoL Suite ${tag}`;
+            const rawTag = process.env.RELEASE_TAG || `v${version}`;
+            const cleanVersion = rawTag.replace(/^v/, "").split("-")[0];
+            const title = process.env.RELEASE_TITLE || `Bedrock QoL Suite ${rawTag}`;
             const isPrerelease = process.env.IS_PRERELEASE === "true" || refName === "development";
-            const releaseUrl = `${repoUrl}/releases/tag/${tag}`;
+            const releaseUrl = `${repoUrl}/releases/tag/${rawTag}`;
+
+            // 1. Locate and prepare .mcaddon attachment
+            const addonPath = findMcAddonFile(cleanVersion);
+            if (addonPath && existsSync(addonPath)) {
+                try {
+                    const stat = statSync(addonPath);
+                    const maxDiscordBytes = 24 * 1024 * 1024; // 24 MB safe threshold for Discord's 25 MB limit
+                    if (stat.size <= maxDiscordBytes) {
+                        filesToAttach.push({
+                            filename: basename(addonPath),
+                            buffer: readFileSync(addonPath),
+                            contentType: "application/octet-stream",
+                            sizeKb: Math.round(stat.size / 1024)
+                        });
+                        console.log(`[Discord Notify] Attaching addon: ${basename(addonPath)} (${Math.round(stat.size / 1024)} KB)`);
+                    } else {
+                        console.warn(`[Discord Notify] Addon exceeds Discord size limit: ${stat.size} bytes`);
+                    }
+                } catch (err) {
+                    console.warn("[Discord Notify] Failed to read addon file:", err.message);
+                }
+            } else {
+                console.warn(`[Discord Notify] No .mcaddon found for version ${cleanVersion}`);
+            }
+
+            // 2. Locate and prepare patch notes attachment
+            const patchNotesPath = findPatchNotesFile(cleanVersion);
+            let patchNotesText = "";
+            if (patchNotesPath && existsSync(patchNotesPath)) {
+                try {
+                    patchNotesText = readFileSync(patchNotesPath, "utf8");
+                    const notesFileName = `BedrockQoL_${rawTag}_PatchNotes.md`;
+                    filesToAttach.push({
+                        filename: notesFileName,
+                        buffer: Buffer.from(patchNotesText, "utf8"),
+                        contentType: "text/markdown",
+                        sizeKb: Math.round(Buffer.byteLength(patchNotesText) / 1024)
+                    });
+                    console.log(`[Discord Notify] Attaching patch notes: ${notesFileName}`);
+                } catch (err) {
+                    console.warn("[Discord Notify] Failed to read patch notes:", err.message);
+                }
+            }
+
+            // 3. Prepare description with highlights / patch notes snippet
+            let descriptionPrefix = isPrerelease
+                ? `⚠️ **Development Preview Build (${rawTag})** is ready for testing!\nDownload the attached \`.mcaddon\` file directly to import into Minecraft Bedrock.`
+                : `🎉 **New Official Release (${rawTag})** is now live!\nDownload the attached \`.mcaddon\` below to install directly into Minecraft Bedrock.`;
+
+            let notesExcerpt = "";
+            if (patchNotesText) {
+                // Truncate to ~1200 characters to comfortably fit inside Discord's 4096 embed description limit
+                const maxExcerptLen = 1200;
+                if (patchNotesText.length > maxExcerptLen) {
+                    notesExcerpt = `\n\n### 📋 Patch Notes Preview\n` +
+                        patchNotesText.slice(0, maxExcerptLen).trim() +
+                        `\n\n*(Full patch notes attached below in \`BedrockQoL_${rawTag}_PatchNotes.md\`)*`;
+                } else {
+                    notesExcerpt = `\n\n### 📋 Patch Notes\n` + patchNotesText.trim();
+                }
+            }
 
             embed = {
                 title: isPrerelease ? `🧪 Beta Release: ${title}` : `🚀 Official Release: ${title}`,
                 url: releaseUrl,
-                color: isPrerelease ? 0xF1C40F : 0x2ECC71, // Gold for beta, Green for stable
-                description: isPrerelease
-                    ? `A new development preview build (\`${tag}\`) is now ready for testing!`
-                    : `A new stable release (\`${tag}\`) is published and available for download.`,
+                color: isPrerelease ? 0xF1C40F : 0x2ECC71, // Gold for Beta, Green for Stable
+                description: descriptionPrefix + notesExcerpt,
                 fields: [
-                    { name: "Tag", value: `[\`${tag}\`](${releaseUrl})`, inline: true },
-                    { name: "Branch", value: `\`${refName}\``, inline: true },
+                    { name: "Tag", value: `[\`${rawTag}\`](${releaseUrl})`, inline: true },
                     { name: "Channel", value: isPrerelease ? "Beta / Development" : "Stable Release", inline: true },
-                    { name: "Build", value: `#${runNumber}`, inline: true },
-                    { name: "Triggered By", value: `\`${actor}\``, inline: true },
-                    { name: "Downloads", value: `[View Assets & Changelog](${releaseUrl})`, inline: true }
+                    { name: "Target", value: `\`${refName}\``, inline: true }
                 ],
-                footer: { text: "Bedrock QoL Suite • GitHub Releases" },
+                footer: { text: "Bedrock QoL Suite • Releases" },
                 timestamp: new Date().toISOString()
             };
+
+            if (filesToAttach.length > 0) {
+                const attachmentList = filesToAttach
+                    .map((f) => `📎 **\`${f.filename}\`** (${f.sizeKb} KB)`)
+                    .join("\n");
+                embed.fields.push({
+                    name: "Attached Files",
+                    value: attachmentList,
+                    inline: false
+                });
+            }
+
+            embed.fields.push({
+                name: "GitHub Release & Assets",
+                value: `[View Full Release on GitHub](${releaseUrl})`,
+                inline: false
+            });
+
             break;
         }
 
@@ -122,19 +269,36 @@ async function sendDiscordNotification() {
     }
 
     const payload = {
-        username: "Bedrock QoL CI",
+        username: eventType === "release" ? "Bedrock QoL Releases" : "Bedrock QoL CI",
         embeds: [embed]
     };
 
     try {
-        const response = await fetch(webhookUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
+        let response;
+        if (filesToAttach.length > 0) {
+            const formData = new FormData();
+            formData.append("payload_json", JSON.stringify(payload));
+
+            for (let i = 0; i < filesToAttach.length; i++) {
+                const file = filesToAttach[i];
+                const blob = new Blob([file.buffer], { type: file.contentType });
+                formData.append(`files[${i}]`, blob, file.filename);
+            }
+
+            response = await fetch(webhookUrl, {
+                method: "POST",
+                body: formData
+            });
+        } else {
+            response = await fetch(webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+        }
 
         if (response.ok) {
-            console.log(`[Discord Notify] Successfully sent '${eventType}' notification.`);
+            console.log(`[Discord Notify] Successfully sent '${eventType}' notification with ${filesToAttach.length} attachment(s).`);
         } else {
             console.warn(`[Discord Notify] Webhook returned status ${response.status}: ${await response.text()}`);
         }
