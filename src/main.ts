@@ -18,6 +18,7 @@ import { initEggHatchingFeature } from "./features/eggHatching";
 import { initAutoWaterBucketFeature } from "./features/autoWaterBucket";
 import { initAfkProtectionFeature } from "./features/afkProtection";
 import { initSmartElytraFeature } from "./features/smartElytra";
+import { initDroppedItemOutlineFeature } from "./features/droppedItemOutline";
 
 // Initialize Features
 initFarmingFeature();
@@ -37,6 +38,7 @@ initEggHatchingFeature();
 initAutoWaterBucketFeature();
 initAfkProtectionFeature();
 initSmartElytraFeature();
+initDroppedItemOutlineFeature();
 
 // Clear any residual titles / subtitles on player spawn to ensure HUD is completely clean
 world.afterEvents.playerSpawn.subscribe((event) => {

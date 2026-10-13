@@ -58,6 +58,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 * **Immortal Pets**: Tamed pets and mounts are protected against fatal damage.
 * **AFK Protection (Experimental)**: Automatically detects when a player goes idle (no movement or camera rotation for 60s). Grants temporary invincibility against all damage causes (mobs, fire, lava, drowning, explosions, fall damage, starvation) and makes hostile mobs ignore and repel away from the AFK player. Resumes normal play instantly upon moving or taking action. Includes optional automatic kick for idle players on Realms or Dedicated Servers with countdown warning on the action bar, with strict exemption for local play (singleplayer). Fully supports singleplayer worlds running AI companion or simulated player addons (e.g. Understudy, GameTest bots) by filtering out bots to accurately detect local play.
 * **Smart Elytra & Chestplate Switch (Experimental)**: Seamlessly swaps between an equipped Elytra and protective chestplate without opening or organizing your inventory. Context-aware intelligent switching auto-equips Elytra when airborne (jumping in mid-air, falling, or using a firework rocket) and automatically restores your best chestplate upon safe landing or when taking mob damage on the ground. Includes broken-Elytra durability protection (<= 1 durability). Manual switching is supported via Double-Sneak (Shift x2 on PC, Crouch x2 on Mobile touch controls), Sneak + Jump (Shift + Space), and configurable PC hotkeys/macros via `/scriptevent qol:elytra_swap` or `/scriptevent qol:swap`.
+* **Dropped Item Entity Debug Outline (Experimental)**: Traces a 3D axis-aligned bounding box (AABB) wireframe particle outline around dropped items (`minecraft:item`) in classic Minecraft F3+B debug fashion using non-drifting `minecraft:endrod` and rarity-tinted particles. Features a floating debug nameplate displaying item count, formatted display name, rarity tier badge (`[Epic]`, `[Rare]`, `[Uncommon]`, `[Common]`), coordinate tracking, and a live 5-minute despawn countdown timer (`6000` vanilla ticks) with visual alerts (`⚠️`, `🚨`). Scoped to nearby players (16 blocks) and capped to maintain 60+ FPS. Can be toggled on or off at runtime via `/scriptevent qol:item_debug` or `/scriptevent qol:item_outline`.
 
 ---
 
@@ -74,6 +75,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 | **Vein Mine** | Crouch (sneak) while breaking ore blocks with a pickaxe |
 | **Tree Capitator** | Break a tree trunk with an axe |
 | **Elytra / Chestplate Switch** | Double-Sneak (Shift x2 / Crouch x2), Sneak + Jump, or `/scriptevent qol:elytra_swap` |
+| **Toggle Item Debug Outline** | `/scriptevent qol:item_debug` or `/scriptevent qol:item_outline` |
 
 ---
 
@@ -92,6 +94,7 @@ Available configurations include:
 * `AutoWaterBucketConfig` — Fall detection sensitivity, clutch trigger distance, and auto-retrieve timing.
 * `AfkProtectionConfig` — Inactivity idle threshold, invincibility duration, mob repel force, status effects, Realm/Server AFK kick timeout, and AI / simulated player bot support.
 * `SmartElytraConfig` — Auto-flight triggers, landing delays, combat defense, hotkey modes, and broken-Elytra protection.
+* `DroppedItemOutlineConfig` — Search radius, item cap, wireframe bounding box dimensions, despawn countdown timer, rarity particle coloring, and script event toggle.
 
 ---
 

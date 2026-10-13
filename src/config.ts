@@ -1521,4 +1521,92 @@ export const SmartElytraConfig = {
     showNotification: true,
 };
 
+export const DroppedItemOutlineConfig = {
+    /**
+     * Whether the Dropped Item Entity Debug Outline feature is enabled.
+     * Default: true
+     */
+    enabled: true,
+
+    /**
+     * Search radius around players (in blocks) to render outlines and debug tags.
+     * Keeps performance at 60+ FPS without scanning the entire world.
+     * Default: 16 blocks
+     */
+    radius: 16,
+
+    /**
+     * Maximum number of dropped item entities to actively track and render per tick.
+     * Default: 32
+     */
+    maxTrackedItems: 32,
+
+    /**
+     * Render a 3D AABB wireframe bounding box around the dropped item entity in Minecraft F3 debug fashion.
+     * Default: true
+     */
+    showWireframeBox: true,
+
+    /**
+     * Display a floating debug info label above the dropped item (name, rarity tier, count, coords).
+     * Default: true
+     */
+    showFloatingInfo: true,
+
+    /**
+     * Display a live 5-minute despawn countdown timer (6000 ticks) in the floating debug label.
+     * Default: true
+     */
+    showDespawnTimer: true,
+
+    /**
+     * Color-code particle bounding boxes and rarity badges according to item rarity tiers:
+     * - Legendary / Epic: Sculk Soul / Magenta
+     * - Rare / Enchanted: Electric Spark / Cyan
+     * - Uncommon: Wax Spark / Yellow
+     * - Common: End Rod / White
+     * Default: true
+     */
+    colorByRarity: true,
+
+    /**
+     * Default fallback particle for wireframe bounding boxes.
+     * "minecraft:endrod" provides stationary, drift-free points.
+     * Default: "minecraft:endrod"
+     */
+    defaultParticle: "minecraft:endrod",
+
+    /**
+     * Display a center vertical axis indicator at the top of the bounding box.
+     * Default: true
+     */
+    showCenterAxis: true,
+
+    /**
+     * Width and length (X and Z size) of the bounding box in blocks.
+     * Vanilla dropped item collision box is ~0.25m, 0.35m fits visual mesh.
+     * Default: 0.35
+     */
+    boxWidth: 0.35,
+
+    /**
+     * Height (Y size) of the bounding box in blocks.
+     * Default: 0.35
+     */
+    boxHeight: 0.35,
+
+    /**
+     * Update rate in ticks for particle wireframes and floating nameplates.
+     * 3 ticks (~0.15s) provides smooth rendering with minimal performance overhead.
+     * Default: 3
+     */
+    updateIntervalTicks: 3,
+
+    /**
+     * Allow in-game toggling via `/scriptevent qol:item_debug` or `/scriptevent qol:item_outline`.
+     * Default: true
+     */
+    enableScriptEventToggle: true,
+};
+
 
