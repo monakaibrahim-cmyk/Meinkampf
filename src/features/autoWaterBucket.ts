@@ -21,7 +21,7 @@ interface FallTracker {
 }
 
 interface BucketLocation {
-    type: "mainhand" | "inventory";
+    type: "mainhand" | "offhand" | "inventory";
     slotIndex?: number;
 }
 
@@ -77,6 +77,11 @@ function findWaterBucket(player: Player): BucketLocation | undefined {
             if (mainhand && mainhand.typeId === "minecraft:water_bucket") {
                 return { type: "mainhand" };
             }
+
+            const offhand = equippable.getEquipment(EquipmentSlot.Offhand);
+            if (offhand && offhand.typeId === "minecraft:water_bucket") {
+                return { type: "offhand" };
+            }
         }
 
         const inv = player.getComponent(EntityComponentTypes.Inventory);
@@ -106,6 +111,10 @@ function consumeWaterBucket(player: Player, loc: BucketLocation): void {
             equippable.setEquipment(EquipmentSlot.Mainhand, new ItemStack("minecraft:bucket", 1));
             return;
         }
+        if (loc.type === "offhand" && equippable) {
+            equippable.setEquipment(EquipmentSlot.Offhand, new ItemStack("minecraft:bucket", 1));
+            return;
+        }
         if (loc.type === "inventory" && loc.slotIndex !== undefined) {
             const inv = player.getComponent(EntityComponentTypes.Inventory);
             if (inv && inv.container) {
@@ -130,6 +139,15 @@ function restoreWaterBucket(player: Player): void {
             const mainhand = equippable.getEquipment(EquipmentSlot.Mainhand);
             if (mainhand && mainhand.typeId === "minecraft:bucket") {
                 equippable.setEquipment(EquipmentSlot.Mainhand, new ItemStack("minecraft:water_bucket", 1));
+                if (AutoWaterBucketConfig.playEffects) {
+                    player.dimension.playSound("bucket.fill_water", player.location, { volume: 0.8, pitch: 1.1 });
+                }
+                return;
+            }
+
+            const offhand = equippable.getEquipment(EquipmentSlot.Offhand);
+            if (offhand && offhand.typeId === "minecraft:bucket") {
+                equippable.setEquipment(EquipmentSlot.Offhand, new ItemStack("minecraft:water_bucket", 1));
                 if (AutoWaterBucketConfig.playEffects) {
                     player.dimension.playSound("bucket.fill_water", player.location, { volume: 0.8, pitch: 1.1 });
                 }

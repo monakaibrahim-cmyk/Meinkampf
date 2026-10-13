@@ -427,7 +427,7 @@ export const DurabilityConfig = {
 export const AutoTotemConfig = {
     /**
      * Enable Auto Totem of Undying protection.
-     * Automatically saves players from fatal damage if a totem exists in inventory or hotbar.
+     * Automatically saves players from fatal damage if a totem exists in offhand, mainhand, hotbar, or backpack.
      * Default: true
      */
     enabled: true,
@@ -452,7 +452,7 @@ export const AutoTotemConfig = {
     voidRescue: true,
 
     /**
-     * Display an alert on screen when a totem activates from backpack or hotbar.
+     * Display an alert on screen when a totem activates from backpack, hotbar, or offhand.
      * Default: true
      */
     notifyPlayer: true,
@@ -765,6 +765,12 @@ export const AutoShieldConfig = {
     blockFrontOnly: true,
 
     /**
+     * Automatically equip a shield from inventory/hotbar into an empty offhand slot.
+     * Default: false
+     */
+    autoEquipToOffhand: false,
+
+    /**
      * Play authentic Minecraft shield block sound upon blocking an attack.
      * Default: true
      */
@@ -821,6 +827,12 @@ export const PassivePotionConfig = {
      * Default: true
      */
     includeHotbar: true,
+
+    /**
+     * Check offhand slot.
+     * Default: true
+     */
+    includeOffhand: true,
 
     /**
      * Periodically heal player if holding a Healing potion and below max health (in ticks).
