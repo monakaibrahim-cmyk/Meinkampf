@@ -1191,4 +1191,124 @@ export const AutoWaterBucketConfig = {
     notifyPlayer: true,
 };
 
+/**
+ * Experimental: AFK Protection Configuration
+ */
+export const AfkProtectionConfig = {
+    /**
+     * Enable experimental AFK Protection feature.
+     * When players are AFK, they gain temporary invincibility and hostile mobs ignore them.
+     * Default: true
+     */
+    enabled: true,
+
+    /**
+     * Inactivity threshold in seconds before a player is automatically considered AFK.
+     * Resets whenever the player moves, rotates camera, interacts, or performs actions.
+     * Default: 60 seconds
+     */
+    afkIdleThresholdSeconds: 60,
+
+    /**
+     * Maximum duration of temporary invincibility in seconds while in AFK mode.
+     * Set to 0 for unlimited invincibility while AFK.
+     * Default: 300 seconds (5 minutes)
+     */
+    temporaryInvincibilityDurationSeconds: 300,
+
+    /**
+     * Protect against all incoming damage while invincibility is active.
+     * Cancels damage from mobs, projectiles, fire, lava, drowning, explosions, fall, starvation, etc.
+     * Default: true
+     */
+    protectFromAllDamage: true,
+
+    /**
+     * Hostile mobs ignore and avoid the AFK player.
+     * Applies Invisibility effect and deters nearby hostile mobs.
+     * Default: true
+     */
+    hostileMobsIgnore: true,
+
+    /**
+     * Radius in blocks around the AFK player to repel and deter approaching hostile mobs.
+     * Default: 12 blocks
+     */
+    mobRepelRadius: 12,
+
+    /**
+     * Horizontal knockback force applied to push approaching hostile mobs away from the AFK player.
+     * Default: 0.5
+     */
+    mobRepelForce: 0.5,
+
+    /**
+     * Apply invisible status effect (without particles) to hide the player from mob line-of-sight.
+     * Default: true
+     */
+    applyInvisibility: true,
+
+    /**
+     * Apply high Resistance status effect as an additional engine-level protection safeguard.
+     * Default: true
+     */
+    applyResistance: true,
+
+    /**
+     * Apply Fire Resistance to protect from burning and lava.
+     * Default: true
+     */
+    applyFireResistance: true,
+
+    /**
+     * Apply Water Breathing to prevent drowning if the player goes AFK in water.
+     * Default: true
+     */
+    applyWaterBreathing: true,
+
+    /**
+     * Automatically extinguish fire if the player is ignited.
+     * Default: true
+     */
+    autoExtinguishFire: true,
+
+    /**
+     * Combat cooldown in seconds. If a player was recently hurt or attacked,
+     * they cannot enter AFK protection until this cooldown has expired (prevents combat logging).
+     * Default: 10 seconds
+     */
+    combatCooldownSeconds: 10,
+
+    /**
+     * Display a repeating action bar notification while AFK protection is active.
+     * Default: true
+     */
+    showActionBar: true,
+
+    /**
+     * Spawn protective shield particles (sparkles/totem aura) around the AFK player.
+     * Default: true
+     */
+    showParticles: true,
+
+    /**
+     * Notify player in chat when entering and exiting AFK mode.
+     * Default: true
+     */
+    notifyPlayer: true,
+
+    /**
+     * Announce to server chat when a player goes AFK or returns.
+     * Default: false
+     */
+    announceToChat: false,
+
+
+    /**
+     * Check interval in ticks for the AFK monitor loop (20 ticks = 1 second).
+     * Default: 20 ticks
+     */
+    checkIntervalTicks: 20,
+};
+
 

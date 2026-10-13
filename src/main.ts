@@ -16,6 +16,7 @@ import { initCreeperMorningDespawnFeature } from "./features/creeperDespawn";
 import { initXpMagnetFeature } from "./features/xpMagnet";
 import { initEggHatchingFeature } from "./features/eggHatching";
 import { initAutoWaterBucketFeature } from "./features/autoWaterBucket";
+import { initAfkProtectionFeature } from "./features/afkProtection";
 
 // Initialize Features
 initFarmingFeature();
@@ -33,6 +34,7 @@ initCreeperMorningDespawnFeature();
 initXpMagnetFeature();
 initEggHatchingFeature();
 initAutoWaterBucketFeature();
+initAfkProtectionFeature();
 
 // Clear any residual titles / subtitles on player spawn to ensure HUD is completely clean
 world.afterEvents.playerSpawn.subscribe((event) => {
