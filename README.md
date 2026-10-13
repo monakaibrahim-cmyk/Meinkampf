@@ -8,9 +8,8 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 
 ## Features
 
-### 1. Dynamic Lighting & Offhand Torches
+### 1. Dynamic Lighting
 * **Held Light Sources**: Torches, lanterns, glowstone, campfires, lava buckets, froglights, copper bulbs, and beacons emit real-time dynamic light around the player.
-* **Offhand Equipping**: Torches and lanterns can be held in the offhand slot to illuminate surroundings while keeping the main hand free for tools or weapons.
 * **Stance Detection**: Dynamic lighting adjusts between standing height (`y + 1`) and feet level (`y`) when swimming or crawling in 1-block spaces.
 * **Water Safety**: Dynamic light placements do not overwrite water source blocks.
 
@@ -32,11 +31,10 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
   * **Quantity**: Sorts by stack size descending.
   * **Compact**: Merges matching partial stacks.
   * **Hotbar Protection**: Locks hotbar slots (0–8) during inventory sorting.
-  * **Torch to Offhand**: Quick-swaps torches and lanterns directly to the offhand slot.
 * **Usage**:
   * Right-click any container with the Quick Sorter item to open container sorting options.
   * Normal attacks / punches break containers without menu interference.
-  * Containers automatically sort upon closing when configured.
+  * Containers automatically sort upon closing when configured (strictly operates on pure storage: chests, barrels, and shulkers; exempts furnaces, blast furnaces, smokers, hoppers, dispensers, droppers, and crafters).
 
 ### 4. Mob Health Bars
 * **Typography**: Segmented health bar nameplate formatted using Minecraft font glyphs.
@@ -58,7 +56,6 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 * **Immortal Pets**: Tamed pets and mounts are protected against fatal damage.
 * **AFK Protection (Experimental)**: Automatically detects when a player goes idle (no movement or camera rotation for 60s). Grants temporary invincibility against all damage causes (mobs, fire, lava, drowning, explosions, fall damage, starvation) and makes hostile mobs ignore and repel away from the AFK player. Resumes normal play instantly upon moving or taking action. Includes optional automatic kick for idle players on Realms or Dedicated Servers with countdown warning on the action bar, with strict exemption for local play (singleplayer). Fully supports singleplayer worlds running AI companion or simulated player addons (e.g. Understudy, GameTest bots) by filtering out bots to accurately detect local play.
 * **Smart Elytra & Chestplate Switch (Experimental)**: Seamlessly swaps between an equipped Elytra and protective chestplate without opening or organizing your inventory. Context-aware intelligent switching auto-equips Elytra when airborne (jumping in mid-air, falling, or using a firework rocket) and automatically restores your best chestplate upon safe landing or when taking mob damage on the ground. Includes broken-Elytra durability protection (<= 1 durability). Manual switching is supported via Double-Sneak (Shift x2 on PC, Crouch x2 on Mobile touch controls), Sneak + Jump (Shift + Space), and configurable PC hotkeys/macros via `/scriptevent qol:elytra_swap` or `/scriptevent qol:swap`.
-* **Dropped Item Entity Debug Outline (Experimental)**: Recreates authentic Minecraft Java Edition **F3 + B** debug hitboxes for dropped item entities (`minecraft:item`). Features a pure white wireframe AABB bounding box matching the exact 0.25m collision box, the signature blue line pointing in the entity's look direction / line of sight, and the signature red horizontal line indicating eye height. Also includes an optional floating debug nameplate with item count, Title Case name, rarity badge, and live 5-minute despawn countdown timer (`6000` ticks). Toggled in-game via `/scriptevent qol:item_debug` (or `/scriptevent qol:hitbox`), with subcommands for granular toggles (`/scriptevent qol:item_debug tags`, `box`, `vector`).
 
 ---
 
@@ -70,12 +67,10 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 | **Open Container Sorter** | Right-click a container with the Quick Sorter equipped |
 | **Break Container** | Punch or mine containers normally with tools or bare hands |
 | **Auto-Sort Container** | Close any open container (when enabled) |
-| **Offhand Torch Swap** | Click `Torch / Lantern Offhand` in Sorter GUI, or right-click torch in air |
 | **Right-Click Harvest** | Right-click mature crops, berry bushes, or cave vines |
 | **Vein Mine** | Crouch (sneak) while breaking ore blocks with a pickaxe |
 | **Tree Capitator** | Break a tree trunk with an axe |
 | **Elytra / Chestplate Switch** | Double-Sneak (Shift x2 / Crouch x2), Sneak + Jump, or `/scriptevent qol:elytra_swap` |
-| **Toggle Java Debug Outlines** | `/scriptevent qol:item_debug` (subcommands: `tags`, `box`, `vector`) |
 
 ---
 
@@ -94,7 +89,6 @@ Available configurations include:
 * `AutoWaterBucketConfig` — Fall detection sensitivity, clutch trigger distance, and auto-retrieve timing.
 * `AfkProtectionConfig` — Inactivity idle threshold, invincibility duration, mob repel force, status effects, Realm/Server AFK kick timeout, and AI / simulated player bot support.
 * `SmartElytraConfig` — Auto-flight triggers, landing delays, combat defense, hotkey modes, and broken-Elytra protection.
-* `DroppedItemOutlineConfig` — Java F3+B debug style, pure white AABB dimensions (0.25m), blue look vector, red eye line, search radius, item cap, and despawn timer.
 
 ---
 

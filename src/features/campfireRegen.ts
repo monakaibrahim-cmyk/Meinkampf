@@ -33,6 +33,39 @@ export function isNamedEntity(entity: Entity): boolean {
     return isPlayerNamedEntity(entity);
 }
 
+/**
+ * Determines whether an entity is a hostile mob, using strict registry matching
+ * with fallback to entity type identifier substrings.
+ */
+export function isHostileMob(typeId: string): boolean {
+    if (HOSTILE_MOBS.has(typeId)) return true;
+    const cleanId = typeId.startsWith("minecraft:") ? typeId.substring(10) : typeId;
+    if (HOSTILE_MOBS.has(`minecraft:${cleanId}`)) return true;
+    return (
+        cleanId.includes("zombie") ||
+        cleanId.includes("skeleton") ||
+        cleanId.includes("creeper") ||
+        cleanId.includes("spider") ||
+        cleanId.includes("slime") ||
+        cleanId.includes("phantom") ||
+        cleanId.includes("illager") ||
+        cleanId.includes("pillager") ||
+        cleanId.includes("vindicator") ||
+        cleanId.includes("evoker") ||
+        cleanId.includes("ravager") ||
+        cleanId.includes("witch") ||
+        cleanId.includes("enderman") ||
+        cleanId.includes("warden") ||
+        cleanId.includes("wither") ||
+        cleanId.includes("blaze") ||
+        cleanId.includes("ghast") ||
+        cleanId.includes("hoglin") ||
+        cleanId.includes("zoglin") ||
+        cleanId.includes("breeze") ||
+        cleanId.includes("bogged")
+    );
+}
+
 interface KnownCampfire {
     x: number;
     y: number;
@@ -108,8 +141,8 @@ export function findLitCampfiresAround(
         return foundCampfires;
     }
 
-    // 2. Discovery scan throttling: only scan if player moved significantly (>= 6 blocks)
-    // or if at least 100 ticks (5 seconds) passed since last scan
+    // 2. Discovery scan throttling: only scan if player moved significantly (>= 4 blocks)
+    // or if at least 60 ticks (3 seconds) passed since last scan
     if (playerId) {
         const lastPos = playerLastCampfireScanPos.get(playerId);
         const lastTick = playerLastCampfireScanTick.get(playerId) ?? 0;
@@ -121,8 +154,8 @@ export function findLitCampfiresAround(
             const dy = pLoc.y - lastPos.y;
             const dz = pLoc.z - lastPos.z;
             const movedDistSq = dx * dx + dy * dy + dz * dz;
-            const timedOut = currentTick - lastTick >= 100;
-            if (movedDistSq < 36 && !timedOut) {
+            const timedOut = currentTick - lastTick >= 60;
+            if (movedDistSq < 16 && !timedOut) {
                 shouldScan = false;
             }
         }
@@ -136,18 +169,20 @@ export function findLitCampfiresAround(
     }
 
     // 3. Local discovery scan: adds any discovered campfire to knownCampfires
-    const minX = Math.floor(pLoc.x) - searchRadius;
-    const maxX = Math.floor(pLoc.x) + searchRadius;
-    const minY = Math.max(-64, Math.floor(pLoc.y) - 6);
-    const maxY = Math.min(320, Math.floor(pLoc.y) + 6);
-    const minZ = Math.floor(pLoc.z) - searchRadius;
-    const maxZ = Math.floor(pLoc.z) + searchRadius;
+    const scanR = Math.min(searchRadius, 10);
+    const scanRSq = scanR * scanR;
+    const minX = Math.floor(pLoc.x) - scanR;
+    const maxX = Math.floor(pLoc.x) + scanR;
+    const minY = Math.max(-64, Math.floor(pLoc.y) - 3);
+    const maxY = Math.min(320, Math.floor(pLoc.y) + 3);
+    const minZ = Math.floor(pLoc.z) - scanR;
+    const maxZ = Math.floor(pLoc.z) + scanR;
 
     for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
             for (let z = minZ; z <= maxZ; z++) {
                 const distSq = (x + 0.5 - pLoc.x) ** 2 + (y + 0.5 - pLoc.y) ** 2 + (z + 0.5 - pLoc.z) ** 2;
-                if (distSq > radiusSq) continue;
+                if (distSq > scanRSq) continue;
 
                 try {
                     const b = dim.getBlock({ x, y, z });
@@ -210,7 +245,7 @@ export function findNearestLitCampfire(
  * Determines whether a mob is eligible for campfire regeneration based on configuration.
  */
 function shouldHealMob(mobTypeId: string): boolean {
-    if (HOSTILE_MOBS.has(mobTypeId)) {
+    if (isHostileMob(mobTypeId)) {
         return false;
     }
 
@@ -385,7 +420,8 @@ export function processCampfireRegeneration(): void {
             }
 
             // 2. Burn, damage, debuff, and repel hostile mobs inside burnHostilesRadius
-            if (CampfireRegenConfig.burnHostiles) {
+            const shouldDefendHostiles = CampfireRegenConfig.burnHostiles || CampfireRegenConfig.debuffHostiles;
+            if (shouldDefendHostiles) {
                 const burnDuration = CampfireRegenConfig.burnHostileDurationSeconds ?? 3;
                 try {
                     const hostiles = dim.getEntities({
@@ -395,7 +431,7 @@ export function processCampfireRegeneration(): void {
 
                     for (const mob of hostiles) {
                         if (!mob || !mob.isValid || mob.typeId === "minecraft:player") continue;
-                        if (HOSTILE_MOBS.has(mob.typeId)) {
+                        if (isHostileMob(mob.typeId)) {
                             // Completely exempt named hostile mobs from campfire burning, damage, debuffs, and knockback
                             if (CampfireRegenConfig.exemptNamedHostiles && isPlayerNamedEntity(mob)) {
                                 continue;
@@ -403,17 +439,18 @@ export function processCampfireRegeneration(): void {
 
                             currentMobsInRange.add(mob.id);
 
-                            // Continuously keep burning duration at full duration (3s) while inside radius
-                            mob.setOnFire(burnDuration, true);
+                            // Continuously keep burning duration at full duration (3s) and deal damage while inside radius
+                            if (CampfireRegenConfig.burnHostiles) {
+                                mob.setOnFire(burnDuration, true);
 
-                            // Deal campfire damage indefinitely every second while inside the radius
-                            if (!damagedMobsThisCycle.has(mob.id)) {
-                                damagedMobsThisCycle.add(mob.id);
-                                const baseDmg = isSoul ? 2 : 1;
-                                try {
-                                    mob.applyDamage(baseDmg, { cause: EntityDamageCause.campfire });
-                                } catch {
-                                    // Entity dead or invulnerable
+                                if (!damagedMobsThisCycle.has(mob.id)) {
+                                    damagedMobsThisCycle.add(mob.id);
+                                    const baseDmg = isSoul ? 2 : 1;
+                                    try {
+                                        mob.applyDamage(baseDmg, { cause: EntityDamageCause.campfire });
+                                    } catch {
+                                        // Entity dead or invulnerable
+                                    }
                                 }
                             }
 
@@ -421,18 +458,19 @@ export function processCampfireRegeneration(): void {
                             if (CampfireRegenConfig.debuffHostiles) {
                                 const debuffTicks = (CampfireRegenConfig.debuffDurationSeconds ?? burnDuration) * 20;
 
-                                // 1. Slowness: slow movement speed (Slowness I for normal, Slowness II for soul)
+                                // 1. Slowness: slow movement speed (Slowness II for normal, Slowness III for soul)
                                 if (CampfireRegenConfig.debuffSlowness) {
+                                    const slownessAmp = isSoul ? 2 : 1;
                                     try {
                                         mob.addEffect("minecraft:slowness", debuffTicks, {
-                                            amplifier: isSoul ? 1 : 0,
-                                            showParticles: false,
+                                            amplifier: slownessAmp,
+                                            showParticles: true,
                                         });
                                     } catch {
                                         try {
                                             mob.addEffect("slowness", debuffTicks, {
-                                                amplifier: isSoul ? 1 : 0,
-                                                showParticles: false,
+                                                amplifier: slownessAmp,
+                                                showParticles: true,
                                             });
                                         } catch {
                                             // Fallback
@@ -442,16 +480,17 @@ export function processCampfireRegeneration(): void {
 
                                 // 2. Weakness: reduce mob melee attack damage (Weakness I for normal, Weakness II for soul)
                                 if (CampfireRegenConfig.debuffWeakness) {
+                                    const weaknessAmp = isSoul ? 1 : 0;
                                     try {
                                         mob.addEffect("minecraft:weakness", debuffTicks, {
-                                            amplifier: isSoul ? 1 : 0,
-                                            showParticles: false,
+                                            amplifier: weaknessAmp,
+                                            showParticles: true,
                                         });
                                     } catch {
                                         try {
                                             mob.addEffect("weakness", debuffTicks, {
-                                                amplifier: isSoul ? 1 : 0,
-                                                showParticles: false,
+                                                amplifier: weaknessAmp,
+                                                showParticles: true,
                                             });
                                         } catch {
                                             // Fallback
@@ -461,16 +500,17 @@ export function processCampfireRegeneration(): void {
 
                                 // 3. Mining Fatigue: slow down attack swing / wind-up speed
                                 if (CampfireRegenConfig.debuffMiningFatigue) {
+                                    const fatigueAmp = isSoul ? 1 : 0;
                                     try {
                                         mob.addEffect("minecraft:mining_fatigue", debuffTicks, {
-                                            amplifier: isSoul ? 1 : 0,
-                                            showParticles: false,
+                                            amplifier: fatigueAmp,
+                                            showParticles: true,
                                         });
                                     } catch {
                                         try {
                                             mob.addEffect("mining_fatigue", debuffTicks, {
-                                                amplifier: isSoul ? 1 : 0,
-                                                showParticles: false,
+                                                amplifier: fatigueAmp,
+                                                showParticles: true,
                                             });
                                         } catch {
                                             // Fallback
@@ -509,13 +549,13 @@ export function processCampfireRegeneration(): void {
                                     try {
                                         mob.addEffect("minecraft:blindness", 40, {
                                             amplifier: 0,
-                                            showParticles: false,
+                                            showParticles: true,
                                         });
                                     } catch {
                                         try {
                                             mob.addEffect("blindness", 40, {
                                                 amplifier: 0,
-                                                showParticles: false,
+                                                showParticles: true,
                                             });
                                         } catch {
                                             // Fallback
@@ -533,21 +573,32 @@ export function processCampfireRegeneration(): void {
                                 mob.applyKnockback({ x: (dx / dist) * 0.4, z: (dz / dist) * 0.4 }, 0.1);
                             }
 
-                            // Spawn fire sizzle particles
+                            // Spawn fire and smoke particles
                             if (CampfireRegenConfig.showParticles) {
-                                dim.spawnParticle("minecraft:basic_flame_particle", {
-                                    x: mLoc.x,
-                                    y: mLoc.y + 0.5,
-                                    z: mLoc.z,
-                                });
+                                try {
+                                    dim.spawnParticle("minecraft:basic_flame_particle", {
+                                        x: mLoc.x,
+                                        y: mLoc.y + 0.5,
+                                        z: mLoc.z,
+                                    });
+                                    dim.spawnParticle(isSoul ? "minecraft:soul_particle" : "minecraft:basic_smoke_particle", {
+                                        x: mLoc.x,
+                                        y: mLoc.y + 0.8,
+                                        z: mLoc.z,
+                                    });
+                                } catch {
+                                    // Ignore
+                                }
                             }
 
                             // Track mob for lingering burn once pushed / fled out of range
-                            trackedCampfireHostiles.set(mob.id, {
-                                entity: mob,
-                                campfireLoc: cCenter,
-                                dimensionId: dim.id,
-                            });
+                            if (CampfireRegenConfig.burnHostiles) {
+                                trackedCampfireHostiles.set(mob.id, {
+                                    entity: mob,
+                                    campfireLoc: cCenter,
+                                    dimensionId: dim.id,
+                                });
+                            }
                         }
                     }
                 } catch {
@@ -630,6 +681,7 @@ export function initCampfireRegenFeature(): void {
 
             // Also check if hostile mob is standing on a lit campfire block taking fire damage
             let onCampfire = false;
+            let campBlock: Block | undefined;
             if (!isCampfireCause && cause === EntityDamageCause.fire) {
                 const hurtEntity = event.hurtEntity;
                 if (hurtEntity && hurtEntity.isValid) {
@@ -637,14 +689,29 @@ export function initCampfireRegenFeature(): void {
                     const loc = hurtEntity.location;
                     const bAt = dim.getBlock(loc);
                     const bBelow = dim.getBlock({ x: loc.x, y: Math.floor(loc.y - 0.2), z: loc.z });
-                    if ((bAt && isLitCampfire(bAt)) || (bBelow && isLitCampfire(bBelow))) {
+                    if (bAt && isLitCampfire(bAt)) {
                         onCampfire = true;
+                        campBlock = bAt;
+                    } else if (bBelow && isLitCampfire(bBelow)) {
+                        onCampfire = true;
+                        campBlock = bBelow;
                     }
                 }
             }
 
+            if (campBlock) {
+                const key = `${campBlock.dimension.id}:${Math.floor(campBlock.location.x)},${Math.floor(campBlock.location.y)},${Math.floor(campBlock.location.z)}`;
+                knownCampfires.set(key, {
+                    x: Math.floor(campBlock.location.x),
+                    y: Math.floor(campBlock.location.y),
+                    z: Math.floor(campBlock.location.z),
+                    dimensionId: campBlock.dimension.id,
+                    isSoul: campBlock.typeId === "minecraft:soul_campfire",
+                });
+            }
+
             if (isCampfireCause || onCampfire) {
-                if (HOSTILE_MOBS.has(event.hurtEntity.typeId)) {
+                if (isHostileMob(event.hurtEntity.typeId)) {
                     // Exempt named hostile mobs from campfire damage
                     if (CampfireRegenConfig.exemptNamedHostiles && isPlayerNamedEntity(event.hurtEntity)) {
                         event.cancel = true;
@@ -665,7 +732,7 @@ export function initCampfireRegenFeature(): void {
         }
     });
 
-    // 2. Event-based tracking of placed and broken campfires
+    // 2. Event-based tracking of placed, interacted, and broken campfires
     world.afterEvents.playerPlaceBlock.subscribe((event) => {
         try {
             const b = event.block;
@@ -676,6 +743,24 @@ export function initCampfireRegenFeature(): void {
                     y: Math.floor(b.location.y),
                     z: Math.floor(b.location.z),
                     dimensionId: event.dimension.id,
+                    isSoul: b.typeId === "minecraft:soul_campfire",
+                });
+            }
+        } catch {
+            // Ignore
+        }
+    });
+
+    world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
+        try {
+            const b = event.block;
+            if (b.typeId === "minecraft:campfire" || b.typeId === "minecraft:soul_campfire") {
+                const key = `${b.dimension.id}:${Math.floor(b.location.x)},${Math.floor(b.location.y)},${Math.floor(b.location.z)}`;
+                knownCampfires.set(key, {
+                    x: Math.floor(b.location.x),
+                    y: Math.floor(b.location.y),
+                    z: Math.floor(b.location.z),
+                    dimensionId: b.dimension.id,
                     isSoul: b.typeId === "minecraft:soul_campfire",
                 });
             }

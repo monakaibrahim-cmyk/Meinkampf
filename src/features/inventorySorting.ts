@@ -104,19 +104,39 @@ export function isSorterItem(item?: ItemStack): boolean {
 }
 
 /**
- * Checks if a block is a container (chest, barrel, shulker, dispenser, etc.).
+ * Checks if a block is an allowed sortable storage container (chest, trapped chest, barrel, shulker box).
+ * Strictly exempts furnaces, blast furnaces, smokers, brewing stands, dispensers, droppers,
+ * hoppers, crafters, lecterns, chiseled bookshelves, and any other non-pure-storage container.
  */
 export function isContainerBlock(block: Block): boolean {
     const typeId = block.typeId;
+
+    // Explicitly reject any furnace, smoker, cooking, redstone, or functional station
     if (
-        typeId.includes("chest") ||
-        typeId.includes("barrel") ||
-        typeId.includes("shulker_box") ||
+        typeId.includes("furnace") ||
+        typeId.includes("smoker") ||
+        typeId.includes("brewing_stand") ||
         typeId.includes("dispenser") ||
         typeId.includes("dropper") ||
-        typeId.includes("hopper")
+        typeId.includes("hopper") ||
+        typeId.includes("crafter") ||
+        typeId.includes("bookshelf") ||
+        typeId.includes("campfire") ||
+        typeId.includes("lectern") ||
+        typeId.includes("jukebox") ||
+        typeId.includes("ender_chest")
     ) {
-        return true;
+        return false;
+    }
+
+    // Only allow standard chests, trapped chests, barrels, and shulker boxes
+    const isStorageType =
+        (typeId.includes("chest") && !typeId.includes("ender_chest")) ||
+        typeId.includes("barrel") ||
+        typeId.includes("shulker_box");
+
+    if (!isStorageType) {
+        return false;
     }
 
     const inv =
@@ -128,8 +148,10 @@ export function isContainerBlock(block: Block): boolean {
 
 /**
  * Retrieves the container of a block safely across all Bedrock versions.
+ * Only returns a container if the block is an allowed sortable storage container.
  */
 export function getBlockContainer(block: Block): Container | undefined {
+    if (!isContainerBlock(block)) return undefined;
     const inv =
         (block.getComponent(BlockComponentTypes.Inventory) as BlockInventoryComponent | undefined) ??
         (block.getComponent("inventory") as BlockInventoryComponent | undefined) ??
