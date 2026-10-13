@@ -1529,6 +1529,39 @@ export const DroppedItemOutlineConfig = {
     enabled: true,
 
     /**
+     * Authentic Minecraft Java Edition F3+B debug hitbox style:
+     * - Pure white wireframe AABB bounding box (0.25 x 0.25)
+     * - Signature blue line pointing in entity look direction (line of sight)
+     * - Signature red horizontal line indicating eye level
+     * Default: true
+     */
+    javaDebugStyle: true,
+
+    /**
+     * Render the signature Java F3+B blue line indicating entity look direction / line of sight.
+     * Default: true
+     */
+    showLookVector: true,
+
+    /**
+     * Render the signature Java F3+B red line indicating entity eye level.
+     * Default: true
+     */
+    showEyeHeight: true,
+
+    /**
+     * Particle ID for the Java F3+B blue look vector line.
+     * Default: "minecraft:blue_flame_particle"
+     */
+    lookVectorParticle: "minecraft:blue_flame_particle",
+
+    /**
+     * Particle ID for the Java F3+B red eye-height line.
+     * Default: "minecraft:redstone_wire_dust_particle"
+     */
+    eyeHeightParticle: "minecraft:redstone_wire_dust_particle",
+
+    /**
      * Search radius around players (in blocks) to render outlines and debug tags.
      * Keeps performance at 60+ FPS without scanning the entire world.
      * Default: 16 blocks
@@ -1560,40 +1593,41 @@ export const DroppedItemOutlineConfig = {
     showDespawnTimer: true,
 
     /**
-     * Color-code particle bounding boxes and rarity badges according to item rarity tiers:
+     * Color-code particle bounding boxes according to item rarity tiers when javaDebugStyle is false:
      * - Legendary / Epic: Sculk Soul / Magenta
      * - Rare / Enchanted: Electric Spark / Cyan
      * - Uncommon: Wax Spark / Yellow
      * - Common: End Rod / White
-     * Default: true
+     * Default: false (pure white Java F3+B is default)
      */
-    colorByRarity: true,
+    colorByRarity: false,
 
     /**
      * Default fallback particle for wireframe bounding boxes.
-     * "minecraft:endrod" provides stationary, drift-free points.
+     * "minecraft:endrod" provides stationary, drift-free pure white points.
      * Default: "minecraft:endrod"
      */
     defaultParticle: "minecraft:endrod",
 
     /**
-     * Display a center vertical axis indicator at the top of the bounding box.
-     * Default: true
+     * Display a center vertical axis indicator at the top of the bounding box when javaDebugStyle is false.
+     * Default: false
      */
-    showCenterAxis: true,
+    showCenterAxis: false,
 
     /**
      * Width and length (X and Z size) of the bounding box in blocks.
-     * Vanilla dropped item collision box is ~0.25m, 0.35m fits visual mesh.
-     * Default: 0.35
+     * Matches exact Java Edition ItemEntity collision box: 0.25m.
+     * Default: 0.25
      */
-    boxWidth: 0.35,
+    boxWidth: 0.25,
 
     /**
      * Height (Y size) of the bounding box in blocks.
-     * Default: 0.35
+     * Matches exact Java Edition ItemEntity collision box: 0.25m.
+     * Default: 0.25
      */
-    boxHeight: 0.35,
+    boxHeight: 0.25,
 
     /**
      * Update rate in ticks for particle wireframes and floating nameplates.

@@ -235,70 +235,166 @@ function formatDespawnCountdown(spawnTick: number, currentTick: number): string 
 }
 
 /**
- * Spawns a 3D AABB wireframe bounding box particle outline around a dropped item entity.
- * Traces the 8 vertices and 12 connecting edges in classic Minecraft F3 debug fashion.
+ * Safely spawns a particle with optional fallback to avoid transient dimension limit errors.
  */
-function renderDebugWireframe(
+function safeSpawnParticle(
     dimension: Dimension,
-    pos: Vector3,
-    particleId: string
+    particleId: string,
+    location: Vector3,
+    fallbackId?: string
 ): void {
-    const halfW = DroppedItemOutlineConfig.boxWidth / 2;
-    const h = DroppedItemOutlineConfig.boxHeight;
-
-    const minX = pos.x - halfW;
-    const maxX = pos.x + halfW;
-    const minY = pos.y + 0.05;
-    const maxY = pos.y + 0.05 + h;
-    const minZ = pos.z - halfW;
-    const maxZ = pos.z + halfW;
-
-    const midX = pos.x;
-    const midY = minY + h / 2;
-    const midZ = pos.z;
-
     try {
-        // 1. Eight corners / vertices of the AABB cuboid
-        dimension.spawnParticle(particleId, { x: minX, y: minY, z: minZ });
-        dimension.spawnParticle(particleId, { x: maxX, y: minY, z: minZ });
-        dimension.spawnParticle(particleId, { x: maxX, y: minY, z: maxZ });
-        dimension.spawnParticle(particleId, { x: minX, y: minY, z: maxZ });
-
-        dimension.spawnParticle(particleId, { x: minX, y: maxY, z: minZ });
-        dimension.spawnParticle(particleId, { x: maxX, y: maxY, z: minZ });
-        dimension.spawnParticle(particleId, { x: maxX, y: maxY, z: maxZ });
-        dimension.spawnParticle(particleId, { x: minX, y: maxY, z: maxZ });
-
-        // 2. Midpoints along the 12 edges to form complete wireframe lines
-        // Bottom perimeter (Y = minY)
-        dimension.spawnParticle(particleId, { x: midX, y: minY, z: minZ });
-        dimension.spawnParticle(particleId, { x: maxX, y: minY, z: midZ });
-        dimension.spawnParticle(particleId, { x: midX, y: minY, z: maxZ });
-        dimension.spawnParticle(particleId, { x: minX, y: minY, z: midZ });
-
-        // Top perimeter (Y = maxY)
-        dimension.spawnParticle(particleId, { x: midX, y: maxY, z: minZ });
-        dimension.spawnParticle(particleId, { x: maxX, y: maxY, z: midZ });
-        dimension.spawnParticle(particleId, { x: midX, y: maxY, z: maxZ });
-        dimension.spawnParticle(particleId, { x: minX, y: maxY, z: midZ });
-
-        // Four vertical corner pillars
-        dimension.spawnParticle(particleId, { x: minX, y: midY, z: minZ });
-        dimension.spawnParticle(particleId, { x: maxX, y: midY, z: minZ });
-        dimension.spawnParticle(particleId, { x: maxX, y: midY, z: maxZ });
-        dimension.spawnParticle(particleId, { x: minX, y: midY, z: maxZ });
-
-        // 3. Center vertical axis indicator (F3 axis tick)
-        if (DroppedItemOutlineConfig.showCenterAxis) {
-            dimension.spawnParticle("minecraft:endrod", { x: pos.x, y: maxY + 0.08, z: pos.z });
-        }
+        dimension.spawnParticle(particleId, location);
     } catch {
-        // Ignore transient particle limits
+        if (fallbackId) {
+            try {
+                dimension.spawnParticle(fallbackId, location);
+            } catch {
+                // Ignore transient particle limits
+            }
+        }
     }
 }
 
 /**
- * Updates the floating debug info label (nameplate) and wireframe outline for a dropped item.
+ * Spawns an interpolated continuous line of particles between two 3D points.
+ */
+function spawnLine(
+    dimension: Dimension,
+    particleId: string,
+    p1: Vector3,
+    p2: Vector3,
+    steps: number,
+    fallbackId?: string
+): void {
+    for (let i = 0; i <= steps; i++) {
+        const t = steps > 0 ? i / steps : 0;
+        safeSpawnParticle(
+            dimension,
+            particleId,
+            {
+                x: p1.x + (p2.x - p1.x) * t,
+                y: p1.y + (p2.y - p1.y) * t,
+                z: p1.z + (p2.z - p1.z) * t,
+            },
+            fallbackId
+        );
+    }
+}
+
+/**
+ * Renders an authentic Minecraft Java Edition (F3+B) debug hitbox outline:
+ * 1. Pure white wireframe AABB bounding box (0.25 x 0.25) connecting all 12 edges with continuous particles
+ * 2. Signature blue line indicating entity look direction / line of sight
+ * 3. Signature red horizontal line indicating eye height / front face
+ */
+function renderJavaDebugOutline(
+    dimension: Dimension,
+    itemEntity: Entity,
+    pos: Vector3,
+    boxParticle: string
+): void {
+    const halfW = DroppedItemOutlineConfig.boxWidth / 2;
+    const height = DroppedItemOutlineConfig.boxHeight;
+
+    const minX = pos.x - halfW;
+    const maxX = pos.x + halfW;
+    const minY = pos.y;
+    const maxY = pos.y + height;
+    const minZ = pos.z - halfW;
+    const maxZ = pos.z + halfW;
+
+    // Density steps along each 0.25m edge (step size ~0.05m ensures unbroken continuous wireframe lines)
+    const edgeSteps = 4;
+
+    // 1. Bottom perimeter edges (Y = minY)
+    spawnLine(dimension, boxParticle, { x: minX, y: minY, z: minZ }, { x: maxX, y: minY, z: minZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: minX, y: minY, z: maxZ }, { x: maxX, y: minY, z: maxZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: minX, y: minY, z: minZ }, { x: minX, y: minY, z: maxZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: maxX, y: minY, z: minZ }, { x: maxX, y: minY, z: maxZ }, edgeSteps);
+
+    // 2. Top perimeter edges (Y = maxY)
+    spawnLine(dimension, boxParticle, { x: minX, y: maxY, z: minZ }, { x: maxX, y: maxY, z: minZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: minX, y: maxY, z: maxZ }, { x: maxX, y: maxY, z: maxZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: minX, y: maxY, z: minZ }, { x: minX, y: maxY, z: maxZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: maxX, y: maxY, z: minZ }, { x: maxX, y: maxY, z: maxZ }, edgeSteps);
+
+    // 3. Four vertical corner pillars (connecting bottom to top)
+    spawnLine(dimension, boxParticle, { x: minX, y: minY, z: minZ }, { x: minX, y: maxY, z: minZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: maxX, y: minY, z: minZ }, { x: maxX, y: maxY, z: minZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: minX, y: minY, z: maxZ }, { x: minX, y: maxY, z: maxZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: maxX, y: minY, z: maxZ }, { x: maxX, y: maxY, z: maxZ }, edgeSteps);
+
+    // Eye height for item entities in Java Edition is ~0.21m
+    const eyeY = minY + height * 0.85;
+
+    // Resolve look vector / facing direction
+    let viewDir = { x: 0, y: 0, z: 1 };
+    try {
+        const vd = itemEntity.getViewDirection();
+        if (vd && (vd.x !== 0 || vd.y !== 0 || vd.z !== 0)) {
+            viewDir = vd;
+        }
+    } catch {
+        try {
+            const rot = itemEntity.getRotation();
+            const yawRad = (-rot.y * Math.PI) / 180;
+            viewDir = { x: Math.sin(yawRad), y: 0, z: Math.cos(yawRad) };
+        } catch {
+            // Default forward
+        }
+    }
+
+    const vLen = Math.sqrt(viewDir.x * viewDir.x + viewDir.y * viewDir.y + viewDir.z * viewDir.z);
+    const nx = vLen > 0.001 ? viewDir.x / vLen : 0;
+    const ny = vLen > 0.001 ? viewDir.y / vLen : 0;
+    const nz = vLen > 0.001 ? viewDir.z / vLen : 1;
+
+    // 4. Blue Line: Look Direction / Line of Sight Vector (Signature Java F3+B)
+    if (DroppedItemOutlineConfig.showLookVector) {
+        const eyePos: Vector3 = { x: pos.x, y: eyeY, z: pos.z };
+        const vectorLength = 0.45; // Extends clearly outside the 0.25m box
+        const targetPos: Vector3 = {
+            x: eyePos.x + nx * vectorLength,
+            y: eyePos.y + ny * vectorLength,
+            z: eyePos.z + nz * vectorLength,
+        };
+
+        const blueParticle = DroppedItemOutlineConfig.lookVectorParticle || "minecraft:blue_flame_particle";
+        spawnLine(dimension, blueParticle, eyePos, targetPos, 5, "minecraft:endrod");
+    }
+
+    // 5. Red Line: Horizontal eye-level indicator across front face (Signature Java F3+B)
+    if (DroppedItemOutlineConfig.showEyeHeight) {
+        const hLen = Math.sqrt(nx * nx + nz * nz);
+        const perpX = hLen > 0.001 ? (-nz / hLen) * halfW : halfW;
+        const perpZ = hLen > 0.001 ? (nx / hLen) * halfW : 0;
+        const frontX = hLen > 0.001 ? (nx / hLen) * halfW : 0;
+        const frontZ = hLen > 0.001 ? (nz / hLen) * halfW : halfW;
+
+        const redStart: Vector3 = {
+            x: pos.x + frontX - perpX,
+            y: eyeY,
+            z: pos.z + frontZ - perpZ,
+        };
+        const redEnd: Vector3 = {
+            x: pos.x + frontX + perpX,
+            y: eyeY,
+            z: pos.z + frontZ + perpZ,
+        };
+
+        const redParticle = DroppedItemOutlineConfig.eyeHeightParticle || "minecraft:redstone_wire_dust_particle";
+        spawnLine(dimension, redParticle, redStart, redEnd, 3, "minecraft:basic_flame_particle");
+    }
+
+    // Optional legacy center axis
+    if (DroppedItemOutlineConfig.showCenterAxis) {
+        safeSpawnParticle(dimension, "minecraft:endrod", { x: pos.x, y: maxY + 0.08, z: pos.z });
+    }
+}
+
+/**
+ * Updates the Java F3+B debug outline and optional floating nameplate for a dropped item.
  */
 function updateItemDebugVisuals(itemEntity: Entity, currentTick: number): void {
     if (!itemEntity.isValid) return;
@@ -313,18 +409,18 @@ function updateItemDebugVisuals(itemEntity: Entity, currentTick: number): void {
 
     const itemStack = itemComp.itemStack;
     const rarity = getItemRarity(itemStack);
-    const particleId = DroppedItemOutlineConfig.colorByRarity
+    const boxParticle = DroppedItemOutlineConfig.colorByRarity && !DroppedItemOutlineConfig.javaDebugStyle
         ? rarity.particleId
         : (DroppedItemOutlineConfig.defaultParticle || "minecraft:endrod");
 
     const pos = itemEntity.location;
 
-    // 1. Render 3D wireframe bounding box
+    // 1. Render Java F3+B debug wireframe bounding box
     if (DroppedItemOutlineConfig.showWireframeBox) {
-        renderDebugWireframe(itemEntity.dimension, pos, particleId);
+        renderJavaDebugOutline(itemEntity.dimension, itemEntity, pos, boxParticle);
     }
 
-    // 2. Render floating debug info tag
+    // 2. Render floating debug info tag (if enabled)
     if (DroppedItemOutlineConfig.showFloatingInfo) {
         let spawnTick = itemSpawnTicks.get(itemEntity.id);
         if (spawnTick === undefined) {
@@ -418,7 +514,7 @@ function processDroppedItemsTick(): void {
 /**
  * Handles /scriptevent commands to toggle the feature in-game.
  */
-function handleScriptEvent(event: { id: string; sourceEntity?: any }): void {
+function handleScriptEvent(event: { id: string; message?: string; sourceEntity?: any }): void {
     if (!DroppedItemOutlineConfig.enableScriptEventToggle) return;
 
     if (
@@ -427,9 +523,42 @@ function handleScriptEvent(event: { id: string; sourceEntity?: any }): void {
         event.id === "qol:hitbox" ||
         event.id === "qol:debug_items"
     ) {
-        isFeatureEnabled = !isFeatureEnabled;
-
         const player = event.sourceEntity as Player | undefined;
+        const msg = (event.message || "").trim().toLowerCase();
+
+        // Subcommands for granular control
+        if (msg === "tags" || msg === "tag" || msg === "name") {
+            DroppedItemOutlineConfig.showFloatingInfo = !DroppedItemOutlineConfig.showFloatingInfo;
+            if (!DroppedItemOutlineConfig.showFloatingInfo) {
+                clearAllDebugTags();
+            }
+            const status = DroppedItemOutlineConfig.showFloatingInfo ? "§aON" : "§cOFF";
+            if (player && player.isValid) {
+                player.sendMessage(`§6⚡ [Java Debug] §fFloating Info & Timer Tags: ${status}`);
+            }
+            return;
+        }
+
+        if (msg === "box" || msg === "hitbox" || msg === "wireframe") {
+            DroppedItemOutlineConfig.showWireframeBox = !DroppedItemOutlineConfig.showWireframeBox;
+            const status = DroppedItemOutlineConfig.showWireframeBox ? "§aON" : "§cOFF";
+            if (player && player.isValid) {
+                player.sendMessage(`§6⚡ [Java Debug] §fF3+B White Wireframe Bounding Box: ${status}`);
+            }
+            return;
+        }
+
+        if (msg === "vector" || msg === "look" || msg === "blue") {
+            DroppedItemOutlineConfig.showLookVector = !DroppedItemOutlineConfig.showLookVector;
+            const status = DroppedItemOutlineConfig.showLookVector ? "§aON" : "§cOFF";
+            if (player && player.isValid) {
+                player.sendMessage(`§6⚡ [Java Debug] §fF3+B Blue Look Vector: ${status}`);
+            }
+            return;
+        }
+
+        // Toggle entire feature
+        isFeatureEnabled = !isFeatureEnabled;
         const statusText = isFeatureEnabled ? "§aENABLED" : "§cDISABLED";
 
         if (!isFeatureEnabled) {
@@ -439,13 +568,13 @@ function handleScriptEvent(event: { id: string; sourceEntity?: any }): void {
         if (player && player.isValid && player.typeId === "minecraft:player") {
             try {
                 player.onScreenDisplay.setActionBar(
-                    `§6⚡ [Item Debug] §fDropped Item Bounding Box & Tags: ${statusText}`
+                    `§6⚡ [Java Debug F3+B] §fItem Hitboxes & Outlines: ${statusText}`
                 );
             } catch {
-                player.sendMessage(`§6⚡ [Item Debug] §fDropped Item Bounding Box & Tags: ${statusText}`);
+                player.sendMessage(`§6⚡ [Java Debug F3+B] §fItem Hitboxes & Outlines: ${statusText}`);
             }
         } else {
-            console.warn(`[ItemDebug] Dropped Item Debug Outline toggled: ${isFeatureEnabled ? "ON" : "OFF"}`);
+            console.warn(`[ItemDebug] Java Debug Hitboxes toggled: ${isFeatureEnabled ? "ON" : "OFF"}`);
         }
     }
 }
