@@ -1,6 +1,10 @@
 # Bedrock QoL Suite
 
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/uNsbXYaQB)
+
 A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Edition (1.21+)** built with the modern Script API (`@minecraft/server`). Designed to reduce repetitive survival micromanagement while maintaining balanced vanilla mechanics.
+
+💬 **Community Discord:** [https://discord.gg/uNsbXYaQB](https://discord.gg/uNsbXYaQB)
 
 ---
 
@@ -126,6 +130,13 @@ Build artifacts are generated in [`dist/`](dist/):
 * **Discord Integration:**
   * **Dedicated Release Channel (`DISCORD_RELEASE_WEBHOOK`):** Set this repository secret to route release announcements to a specific Discord channel (e.g. `#releases` or `#announcements`). Releases automatically attach the compiled `.mcaddon` file and patch notes `.md` alongside a rich embed with inline notes.
   * **Development Logs & Failures (`DISCORD_WEBHOOK` or `DISCORD_DEV_WEBHOOK`):** Routes commit notifications and CI check failure alerts to developer channels (e.g. `#dev-logs`). Also serves as a fallback for release announcements if no dedicated release webhook is set.
+
+---
+
+## Community & Discord
+
+Join our official Discord community for discussion, bug reports, feature requests, and early development builds:
+👉 **[Join Discord Server (discord.gg/uNsbXYaQB)](https://discord.gg/uNsbXYaQB)**
 
 ---
 
