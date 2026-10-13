@@ -10,7 +10,7 @@ import {
     world,
 } from "@minecraft/server";
 import { CampfireRegenConfig } from "../config";
-import { HOSTILE_MOBS } from "./mobHealthBar";
+import { HOSTILE_MOBS, NEUTRAL_MOBS, PASSIVE_MOBS } from "./mobHealthBar";
 
 interface TrackedCampfireMob {
     entity: Entity;
@@ -157,7 +157,38 @@ export function findNearestLitCampfire(
 }
 
 /**
- * Processes campfire health regeneration for all online players and their nearby pets.
+ * Determines whether a mob is eligible for campfire regeneration based on configuration.
+ */
+function shouldHealMob(mobTypeId: string): boolean {
+    if (HOSTILE_MOBS.has(mobTypeId)) {
+        return false;
+    }
+
+    if (
+        CampfireRegenConfig.healPets &&
+        (mobTypeId === "minecraft:wolf" ||
+            mobTypeId === "minecraft:cat" ||
+            mobTypeId === "minecraft:horse" ||
+            mobTypeId === "minecraft:donkey" ||
+            mobTypeId === "minecraft:mule" ||
+            mobTypeId === "minecraft:parrot")
+    ) {
+        return true;
+    }
+
+    if (CampfireRegenConfig.healNeutralMobs && NEUTRAL_MOBS.has(mobTypeId)) {
+        return true;
+    }
+
+    if (CampfireRegenConfig.healPassiveMobs && PASSIVE_MOBS.has(mobTypeId)) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Processes campfire health regeneration for all online players and their nearby pets, neutral, and passive mobs.
  * Runs once per second (every 20 ticks) for authentic vanilla survival balance.
  */
 export function processCampfireRegeneration(): void {
@@ -168,7 +199,7 @@ export function processCampfireRegeneration(): void {
 
     const radius = CampfireRegenConfig.radius;
     const baseHeal = CampfireRegenConfig.baseHealthPerSecond;
-    const healedPetIds = new Set<string>();
+    const healedEntityIds = new Set<string>();
     const currentMobsInRange = new Set<string>();
     const damagedMobsThisCycle = new Set<string>();
 
@@ -224,41 +255,52 @@ export function processCampfireRegeneration(): void {
                 }
             }
 
-            // Heal nearby tamed pets (wolves, cats, horses, parrots)
-            if (CampfireRegenConfig.healPets) {
-                const pets = dim.getEntities({
-                    location: pLoc,
-                    maxDistance: radius,
-                });
-                for (const pet of pets) {
-                    if (pet.id === player.id) continue;
-                    if (healedPetIds.has(pet.id)) continue;
-                    if (
-                        pet.typeId === "minecraft:wolf" ||
-                        pet.typeId === "minecraft:cat" ||
-                        pet.typeId === "minecraft:horse" ||
-                        pet.typeId === "minecraft:donkey" ||
-                        pet.typeId === "minecraft:mule" ||
-                        pet.typeId === "minecraft:parrot"
-                    ) {
-                        healedPetIds.add(pet.id);
-                        const petHealth = pet.getComponent(EntityComponentTypes.Health) as EntityHealthComponent | undefined;
-                        if (petHealth && petHealth.currentValue < petHealth.effectiveMax) {
-                            petHealth.setCurrentValue(Math.min(petHealth.effectiveMax, petHealth.currentValue + healAmount));
+            // Heal nearby tamed pets, neutral mobs, and passive mobs
+            const shouldHealAnyMob =
+                CampfireRegenConfig.healPets ||
+                CampfireRegenConfig.healNeutralMobs ||
+                CampfireRegenConfig.healPassiveMobs;
 
-                            if (CampfireRegenConfig.showParticles) {
-                                try {
-                                    dim.spawnParticle("minecraft:heart_particle", {
-                                        x: pet.location.x,
-                                        y: pet.location.y + 0.8,
-                                        z: pet.location.z,
-                                    });
-                                } catch {
-                                    // Ignore
+            if (shouldHealAnyMob && nearestCampfire) {
+                const firePos = nearestCampfire.location;
+                const cCenter: Vector3 = { x: firePos.x + 0.5, y: firePos.y + 0.5, z: firePos.z + 0.5 };
+                try {
+                    const nearbyEntities = dim.getEntities({
+                        location: cCenter,
+                        maxDistance: radius,
+                    });
+
+                    for (const mob of nearbyEntities) {
+                        if (!mob || !mob.isValid || mob.id === player.id) continue;
+                        if (healedEntityIds.has(mob.id)) continue;
+
+                        if (shouldHealMob(mob.typeId)) {
+                            healedEntityIds.add(mob.id);
+
+                            // Do not heal mob if it is actively burning
+                            const mobOnFire = mob.getComponent(EntityComponentTypes.OnFire);
+                            if (mobOnFire) continue;
+
+                            const mobHealth = mob.getComponent(EntityComponentTypes.Health) as EntityHealthComponent | undefined;
+                            if (mobHealth && mobHealth.currentValue < mobHealth.effectiveMax) {
+                                mobHealth.setCurrentValue(Math.min(mobHealth.effectiveMax, mobHealth.currentValue + healAmount));
+
+                                if (CampfireRegenConfig.showParticles) {
+                                    try {
+                                        dim.spawnParticle("minecraft:heart_particle", {
+                                            x: mob.location.x,
+                                            y: mob.location.y + 0.8,
+                                            z: mob.location.z,
+                                        });
+                                    } catch {
+                                        // Ignore
+                                    }
                                 }
                             }
                         }
                     }
+                } catch {
+                    // Fallback
                 }
             }
 

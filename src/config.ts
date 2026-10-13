@@ -693,6 +693,18 @@ export const CampfireRegenConfig = {
     healPets: true,
 
     /**
+     * Also regenerate nearby neutral mobs (iron golems, snow golems, pandas, bees, dolphins, etc.).
+     * Default: true
+     */
+    healNeutralMobs: true,
+
+    /**
+     * Also regenerate nearby passive mobs and farm animals (cows, sheep, pigs, chickens, villagers, etc.).
+     * Default: true
+     */
+    healPassiveMobs: true,
+
+    /**
      * Spawn warm healing heart particles while regenerating.
      * Default: true
      */
