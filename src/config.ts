@@ -1382,4 +1382,127 @@ export const AfkProtectionConfig = {
     checkIntervalTicks: 20,
 };
 
+export const SmartElytraConfig = {
+    /**
+     * Enable smart and manual Elytra <--> Chestplate switching.
+     * Default: true
+     */
+    enabled: true,
+
+    /**
+     * MANUAL SWITCH CONTROLS
+     * Swap chestplate and elytra without opening or organizing inventory.
+     */
+    manualSwitch: {
+        /**
+         * Enable manual hotkey switching.
+         * Default: true
+         */
+        enabled: true,
+
+        /**
+         * Hotkey trigger method:
+         * - "all": Supports Double-Sneak, Sneak+Jump, and Sneak+Interact
+         * - "double_sneak": Tap Sneak twice within doubleSneakWindowMs (PC: Shift x2, Mobile: Crouch x2, Controller: B x2)
+         * - "sneak_jump": Press Jump while Sneaking (PC: Shift + Space)
+         * - "sneak_use": Right-click / Interact while Sneaking
+         * Default: "all"
+         */
+        hotkeyMode: "all" as "all" | "double_sneak" | "sneak_jump" | "sneak_use",
+
+        /**
+         * Time window in milliseconds to register a double-sneak tap.
+         * Default: 400ms
+         */
+        doubleSneakWindowMs: 400,
+
+        /**
+         * Enable ScriptEvent commands (/scriptevent qol:elytra_swap or /scriptevent qol:swap).
+         * Allows players to bind custom PC macro keys or command blocks.
+         * Default: true
+         */
+        enableScriptEvent: true,
+
+        /**
+         * Cooldown in ticks (20 ticks = 1 second) between manual swaps to prevent spamming.
+         * Default: 8 ticks (0.4s)
+         */
+        cooldownTicks: 8,
+    },
+
+    /**
+     * CONTEXT-AWARE SMART SWITCH
+     * Automatically equips Elytra for flight and Chestplate for defense.
+     */
+    smartSwitch: {
+        /**
+         * Enable automatic context-aware switching.
+         * Default: true
+         */
+        enabled: true,
+
+        /**
+         * Auto-equip Elytra when in mid-air (jumping while airborne, or falling from height).
+         * Default: true
+         */
+        autoEquipElytraInAir: true,
+
+        /**
+         * Minimum fall distance in blocks before auto-equipping Elytra.
+         * Default: 2.5 blocks
+         */
+        minFallDistanceForElytra: 2.5,
+
+        /**
+         * Downward vertical velocity (velocity.y) threshold to trigger Elytra auto-equip.
+         * Default: -0.45
+         */
+        downwardVelocityThreshold: -0.45,
+
+        /**
+         * Auto-equip Elytra when using a Firework Rocket while in mid-air.
+         * Default: true
+         */
+        autoEquipOnFireworkUse: true,
+
+        /**
+         * Auto-equip Chestplate when landing safely on the ground.
+         * Default: true
+         */
+        autoEquipChestplateOnLand: true,
+
+        /**
+         * Delay in ticks on ground before swapping back to chestplate.
+         * Prevents accidental swapping during low-altitude glides or bunny hops.
+         * Default: 6 ticks (0.3s)
+         */
+        landDelayTicks: 6,
+
+        /**
+         * Auto-equip Chestplate when hurt by mobs or players while on the ground.
+         * Immediately restores full armor defense during surprise attacks.
+         * Default: true
+         */
+        autoEquipChestplateOnHurt: true,
+
+        /**
+         * Prevent Elytra from breaking by auto-swapping to chestplate when durability is critically low (<= 1).
+         * Default: true
+         */
+        brokenElytraProtection: true,
+    },
+
+    /**
+     * Play equip sound effects upon swapping.
+     * Default: true
+     */
+    playSounds: true,
+
+    /**
+     * Show clean action-bar notifications when swapped.
+     * Default: true
+     */
+    showNotification: true,
+};
+
 
