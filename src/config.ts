@@ -1533,20 +1533,20 @@ export const DroppedItemOutlineConfig = {
 
     /**
      * Particle ID for the Java F3+B blue look vector line.
-     * Default: "minecraft:blue_flame_particle"
+     * Default: "qol:debug_line_blue" (crisp zero-drift line), fallback "minecraft:blue_flame_particle"
      */
-    lookVectorParticle: "minecraft:blue_flame_particle",
+    lookVectorParticle: "qol:debug_line_blue",
 
     /**
      * Particle ID for the Java F3+B red eye-height line.
-     * Default: "minecraft:redstone_wire_dust_particle"
+     * Default: "qol:debug_line_red" (crisp zero-drift line), fallback "minecraft:redstone_wire_dust_particle"
      */
-    eyeHeightParticle: "minecraft:redstone_wire_dust_particle",
+    eyeHeightParticle: "qol:debug_line_red",
 
     /**
      * Outline rendering method:
-     * - "overlay": Native 3D wireframe outline overlay via @minecraft/debug-utilities (clean, un-textured Java F3+B debug lines, zero particles).
-     * - "particle": Legacy fallback particle rendering.
+     * - "overlay": Crisp 3D wireframe outline overlay with zero-gravity stationary geometric lines (pure white Java F3+B debug style).
+     * - "particle": Classic vanilla particle wireframes (minecraft:endrod).
      * Default: "overlay"
      */
     renderMode: "overlay" as "overlay" | "particle",
@@ -1611,17 +1611,17 @@ export const DroppedItemOutlineConfig = {
      * - Legendary / Epic: Sculk Soul / Magenta
      * - Rare / Enchanted: Electric Spark / Cyan
      * - Uncommon: Wax Spark / Yellow
-     * - Common: End Rod / White
+     * - Common: White
      * Default: false (pure white Java F3+B is default)
      */
     colorByRarity: false,
 
     /**
-     * Default fallback particle for wireframe bounding boxes in particle mode.
-     * "minecraft:endrod" provides stationary, drift-free pure white points.
-     * Default: "minecraft:endrod"
+     * Default particle for wireframe bounding boxes.
+     * "qol:debug_line_white" provides stationary, drift-free pure white geometric points.
+     * Default: "qol:debug_line_white"
      */
-    defaultParticle: "minecraft:endrod",
+    defaultParticle: "qol:debug_line_white",
 
     /**
      * Display a center vertical axis indicator at the top of the bounding box when javaDebugStyle is false.

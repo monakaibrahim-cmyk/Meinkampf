@@ -4,8 +4,8 @@
   "description": "Modular, high-performance Quality-of-Life add-on suite for Minecraft Bedrock Edition.",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --format=esm --target=es2022 --outfile=behavior_pack/scripts/main.js --external:@minecraft/server --external:@minecraft/server-ui --external:@minecraft/vanilla-data --external:@minecraft/debug-utilities",
-    "watch": "esbuild src/main.ts --bundle --format=esm --target=es2022 --outfile=behavior_pack/scripts/main.js --external:@minecraft/server --external:@minecraft/server-ui --external:@minecraft/vanilla-data --external:@minecraft/debug-utilities --watch",
+    "build": "esbuild src/main.ts --bundle --format=esm --target=es2022 --outfile=behavior_pack/scripts/main.js --external:@minecraft/server --external:@minecraft/server-ui --external:@minecraft/vanilla-data",
+    "watch": "esbuild src/main.ts --bundle --format=esm --target=es2022 --outfile=behavior_pack/scripts/main.js --external:@minecraft/server --external:@minecraft/server-ui --external:@minecraft/vanilla-data --watch",
     "typecheck": "tsc --noEmit",
     "pack": "node scripts/pack.js",
     "pack/build": "node scripts/pack.js",
@@ -26,7 +26,6 @@
   "license": "MIT",
   "dependencies": {
     "@minecraft/core-build-tasks": "^5.7.0",
-    "@minecraft/debug-utilities": "^1.0.0-beta.1.26.52-stable",
     "@minecraft/server": "^2.10.0",
     "@minecraft/server-ui": "^2.2.0",
     "@minecraft/vanilla-data": "^1.26.52"

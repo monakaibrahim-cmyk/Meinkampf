@@ -9,14 +9,7 @@ import {
     ItemStack,
     Vector3,
     Player,
-    RGBA,
 } from "@minecraft/server";
-import {
-    debugDrawer,
-    DebugBox,
-    DebugLine,
-    DebugShape,
-} from "@minecraft/debug-utilities";
 import { DroppedItemOutlineConfig } from "../config";
 
 /**
@@ -29,7 +22,6 @@ export interface ItemRarityInfo {
     badge: string;
     nameColor: string;
     particleId: string;
-    overlayColor: RGBA;
 }
 
 /**
@@ -164,96 +156,7 @@ const VANILLA_DESPAWN_TICKS = 6000;
 let isFeatureEnabled = DroppedItemOutlineConfig.enabled;
 
 /**
- * Active debug overlay shapes tracked per item entity in overlay mode.
- */
-interface ItemOverlayShapes {
-    entity: Entity;
-    box?: DebugBox;
-    lookLine?: DebugLine;
-    eyeLine?: DebugLine;
-    lastSeenTick: number;
-}
-
-const activeItemOverlays = new Map<string, ItemOverlayShapes>();
-let hasLoggedDrawerWarning = false;
-
-/**
- * Safely handles any runtime errors from @minecraft/debug-utilities.
- */
-function handleDrawerError(err: unknown): void {
-    if (!hasLoggedDrawerWarning) {
-        hasLoggedDrawerWarning = true;
-        console.warn(
-            "[ItemDebug] debugDrawer error encountered. Falling back to particle outline mode. Error:",
-            err
-        );
-        DroppedItemOutlineConfig.renderMode = "particle";
-    }
-}
-
-/**
- * Removes all active debug shapes for a specific entity ID.
- */
-function removeOverlayForEntity(entityId: string): void {
-    const overlay = activeItemOverlays.get(entityId);
-    if (!overlay) return;
-
-    if (overlay.box) {
-        try {
-            overlay.box.remove();
-        } catch {
-            try {
-                debugDrawer.removeShape(overlay.box);
-            } catch {
-                // Ignore
-            }
-        }
-    }
-
-    if (overlay.lookLine) {
-        try {
-            overlay.lookLine.remove();
-        } catch {
-            try {
-                debugDrawer.removeShape(overlay.lookLine);
-            } catch {
-                // Ignore
-            }
-        }
-    }
-
-    if (overlay.eyeLine) {
-        try {
-            overlay.eyeLine.remove();
-        } catch {
-            try {
-                debugDrawer.removeShape(overlay.eyeLine);
-            } catch {
-                // Ignore
-            }
-        }
-    }
-
-    activeItemOverlays.delete(entityId);
-}
-
-/**
- * Clears all active debug shapes from debugDrawer.
- */
-function clearAllOverlays(): void {
-    for (const id of Array.from(activeItemOverlays.keys())) {
-        removeOverlayForEntity(id);
-    }
-    activeItemOverlays.clear();
-    try {
-        debugDrawer.removeAll();
-    } catch {
-        // Ignore
-    }
-}
-
-/**
- * Determines the rarity tier, badge, and particle/overlay colors for an item.
+ * Determines the rarity tier, badge, and particle for an item.
  */
 export function getItemRarity(itemStack: ItemStack): ItemRarityInfo {
     const typeId = itemStack.typeId;
@@ -275,7 +178,6 @@ export function getItemRarity(itemStack: ItemStack): ItemRarityInfo {
             badge: "§d[Epic]",
             nameColor: "§d",
             particleId: "minecraft:sculk_soul_particle",
-            overlayColor: { red: 0.85, green: 0.25, blue: 0.95, alpha: 1.0 },
         };
     }
 
@@ -285,7 +187,6 @@ export function getItemRarity(itemStack: ItemStack): ItemRarityInfo {
             badge: hasEnchants ? "§b[Enchanted]" : "§b[Rare]",
             nameColor: "§b",
             particleId: "minecraft:electric_spark_particle",
-            overlayColor: { red: 0.2, green: 0.85, blue: 1.0, alpha: 1.0 },
         };
     }
 
@@ -295,7 +196,6 @@ export function getItemRarity(itemStack: ItemStack): ItemRarityInfo {
             badge: "§e[Uncommon]",
             nameColor: "§e",
             particleId: "minecraft:wax_particle",
-            overlayColor: { red: 1.0, green: 0.85, blue: 0.1, alpha: 1.0 },
         };
     }
 
@@ -303,8 +203,7 @@ export function getItemRarity(itemStack: ItemStack): ItemRarityInfo {
         rarity: "common",
         badge: "§7[Common]",
         nameColor: "§f",
-        particleId: DroppedItemOutlineConfig.defaultParticle || "minecraft:endrod",
-        overlayColor: { red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 },
+        particleId: DroppedItemOutlineConfig.defaultParticle || "qol:debug_line_white",
     };
 }
 
@@ -336,233 +235,6 @@ function formatDespawnCountdown(spawnTick: number, currentTick: number): string 
 }
 
 /**
- * Renders an authentic Minecraft Java Edition (F3+B) debug hitbox wireframe overlay using native engine debugDrawer:
- * 1. Crisp 3D white wireframe AABB bounding box (0.25 x 0.25) rendered directly by RenderDragon (zero particles)
- * 2. Signature blue vector line indicating entity look direction / line of sight
- * 3. Signature red horizontal line indicating eye height / front face
- */
-function renderJavaDebugOverlay(
-    itemEntity: Entity,
-    currentTick: number,
-    boxColor: RGBA
-): void {
-    if (!itemEntity.isValid) return;
-
-    let overlay = activeItemOverlays.get(itemEntity.id);
-    const pos = itemEntity.location;
-    const height = DroppedItemOutlineConfig.boxHeight;
-    const halfW = DroppedItemOutlineConfig.boxWidth / 2;
-    const eyeY = pos.y + height * 0.85;
-
-    // Resolve look vector / facing direction
-    let viewDir = { x: 0, y: 0, z: 1 };
-    try {
-        const vd = itemEntity.getViewDirection();
-        if (vd && (vd.x !== 0 || vd.y !== 0 || vd.z !== 0)) {
-            viewDir = vd;
-        }
-    } catch {
-        try {
-            const rot = itemEntity.getRotation();
-            const yawRad = (-rot.y * Math.PI) / 180;
-            viewDir = { x: Math.sin(yawRad), y: 0, z: Math.cos(yawRad) };
-        } catch {
-            // Default forward
-        }
-    }
-
-    const vLen = Math.sqrt(viewDir.x * viewDir.x + viewDir.y * viewDir.y + viewDir.z * viewDir.z);
-    const nx = vLen > 0.001 ? viewDir.x / vLen : 0;
-    const ny = vLen > 0.001 ? viewDir.y / vLen : 0;
-    const nz = vLen > 0.001 ? viewDir.z / vLen : 1;
-
-    const eyePos: Vector3 = { x: pos.x, y: eyeY, z: pos.z };
-    const vectorLength = DroppedItemOutlineConfig.lookVectorLength || 0.45;
-    const lookTargetPos: Vector3 = {
-        x: eyePos.x + nx * vectorLength,
-        y: eyePos.y + ny * vectorLength,
-        z: eyePos.z + nz * vectorLength,
-    };
-
-    // Red line endpoints across front face
-    const hLen = Math.sqrt(nx * nx + nz * nz);
-    const perpX = hLen > 0.001 ? (-nz / hLen) * halfW : halfW;
-    const perpZ = hLen > 0.001 ? (nx / hLen) * halfW : 0;
-    const frontX = hLen > 0.001 ? (nx / hLen) * halfW : 0;
-    const frontZ = hLen > 0.001 ? (nz / hLen) * halfW : halfW;
-
-    const redStart: Vector3 = {
-        x: pos.x + frontX - perpX,
-        y: eyeY,
-        z: pos.z + frontZ - perpZ,
-    };
-    const redEnd: Vector3 = {
-        x: pos.x + frontX + perpX,
-        y: eyeY,
-        z: pos.z + frontZ + perpZ,
-    };
-
-    const centerPos: Vector3 = {
-        x: pos.x,
-        y: pos.y + height / 2,
-        z: pos.z,
-    };
-
-    if (!overlay) {
-        overlay = {
-            entity: itemEntity,
-            lastSeenTick: currentTick,
-        };
-
-        // 1. Wireframe AABB Box
-        if (DroppedItemOutlineConfig.showWireframeBox) {
-            try {
-                const box = new DebugBox(centerPos);
-                box.bound = {
-                    x: DroppedItemOutlineConfig.boxWidth,
-                    y: DroppedItemOutlineConfig.boxHeight,
-                    z: DroppedItemOutlineConfig.boxWidth,
-                };
-                box.color = boxColor;
-                try {
-                    box.attachedTo = itemEntity;
-                } catch {
-                    // Ignore if attachedTo is not supported
-                }
-                debugDrawer.addShape(box, itemEntity.dimension);
-                overlay.box = box;
-            } catch (err) {
-                handleDrawerError(err);
-                return;
-            }
-        }
-
-        // 2. Blue Look Vector Line (Java F3+B Signature)
-        if (DroppedItemOutlineConfig.showLookVector) {
-            try {
-                const lookLine = new DebugLine(eyePos, lookTargetPos);
-                lookLine.color = DroppedItemOutlineConfig.overlayLookVectorColor;
-                debugDrawer.addShape(lookLine, itemEntity.dimension);
-                overlay.lookLine = lookLine;
-            } catch (err) {
-                handleDrawerError(err);
-            }
-        }
-
-        // 3. Red Eye Height Line (Java F3+B Signature)
-        if (DroppedItemOutlineConfig.showEyeHeight) {
-            try {
-                const eyeLine = new DebugLine(redStart, redEnd);
-                eyeLine.color = DroppedItemOutlineConfig.overlayEyeHeightColor;
-                debugDrawer.addShape(eyeLine, itemEntity.dimension);
-                overlay.eyeLine = eyeLine;
-            } catch (err) {
-                handleDrawerError(err);
-            }
-        }
-
-        activeItemOverlays.set(itemEntity.id, overlay);
-    } else {
-        // Overlay already active: refresh positions and timestamp
-        overlay.lastSeenTick = currentTick;
-
-        // Update Box position/color
-        if (overlay.box) {
-            if (DroppedItemOutlineConfig.showWireframeBox) {
-                try {
-                    overlay.box.setLocation(centerPos);
-                    overlay.box.color = boxColor;
-                } catch {
-                    // Ignore
-                }
-            } else {
-                try {
-                    overlay.box.remove();
-                } catch {
-                    // Ignore
-                }
-                overlay.box = undefined;
-            }
-        } else if (DroppedItemOutlineConfig.showWireframeBox) {
-            try {
-                const box = new DebugBox(centerPos);
-                box.bound = {
-                    x: DroppedItemOutlineConfig.boxWidth,
-                    y: DroppedItemOutlineConfig.boxHeight,
-                    z: DroppedItemOutlineConfig.boxWidth,
-                };
-                box.color = boxColor;
-                try {
-                    box.attachedTo = itemEntity;
-                } catch {
-                    // Ignore
-                }
-                debugDrawer.addShape(box, itemEntity.dimension);
-                overlay.box = box;
-            } catch {
-                // Ignore
-            }
-        }
-
-        // Update Look Vector Line
-        if (overlay.lookLine) {
-            if (DroppedItemOutlineConfig.showLookVector) {
-                try {
-                    overlay.lookLine.setLocation(eyePos);
-                    overlay.lookLine.endLocation = lookTargetPos;
-                } catch {
-                    // Ignore
-                }
-            } else {
-                try {
-                    overlay.lookLine.remove();
-                } catch {
-                    // Ignore
-                }
-                overlay.lookLine = undefined;
-            }
-        } else if (DroppedItemOutlineConfig.showLookVector) {
-            try {
-                const lookLine = new DebugLine(eyePos, lookTargetPos);
-                lookLine.color = DroppedItemOutlineConfig.overlayLookVectorColor;
-                debugDrawer.addShape(lookLine, itemEntity.dimension);
-                overlay.lookLine = lookLine;
-            } catch {
-                // Ignore
-            }
-        }
-
-        // Update Eye Height Line
-        if (overlay.eyeLine) {
-            if (DroppedItemOutlineConfig.showEyeHeight) {
-                try {
-                    overlay.eyeLine.setLocation(redStart);
-                    overlay.eyeLine.endLocation = redEnd;
-                } catch {
-                    // Ignore
-                }
-            } else {
-                try {
-                    overlay.eyeLine.remove();
-                } catch {
-                    // Ignore
-                }
-                overlay.eyeLine = undefined;
-            }
-        } else if (DroppedItemOutlineConfig.showEyeHeight) {
-            try {
-                const eyeLine = new DebugLine(redStart, redEnd);
-                eyeLine.color = DroppedItemOutlineConfig.overlayEyeHeightColor;
-                debugDrawer.addShape(eyeLine, itemEntity.dimension);
-                overlay.eyeLine = eyeLine;
-            } catch {
-                // Ignore
-            }
-        }
-    }
-}
-
-/**
  * Safely spawns a particle with optional fallback to avoid transient dimension limit errors.
  */
 function safeSpawnParticle(
@@ -574,7 +246,7 @@ function safeSpawnParticle(
     try {
         dimension.spawnParticle(particleId, location);
     } catch {
-        if (fallbackId) {
+        if (fallbackId && fallbackId !== particleId) {
             try {
                 dimension.spawnParticle(fallbackId, location);
             } catch {
@@ -585,9 +257,9 @@ function safeSpawnParticle(
 }
 
 /**
- * Spawns an interpolated continuous line of particles between two 3D points (particle mode fallback).
+ * Spawns an interpolated continuous line of particles between two 3D points.
  */
-function spawnParticleLine(
+function spawnLine(
     dimension: Dimension,
     particleId: string,
     p1: Vector3,
@@ -611,13 +283,21 @@ function spawnParticleLine(
 }
 
 /**
- * Renders Java Edition (F3+B) debug hitbox using particles (legacy fallback mode).
+ * Renders an authentic Minecraft Java Edition (F3+B) debug hitbox outline:
+ * 1. Pure white wireframe AABB bounding box (0.25 x 0.25) connecting all 12 edges with continuous points
+ * 2. Signature blue line indicating entity look direction / line of sight
+ * 3. Signature red horizontal line indicating eye height / front face
  */
-function renderJavaDebugParticles(
+function renderJavaDebugOutline(
     dimension: Dimension,
     itemEntity: Entity,
     pos: Vector3,
-    boxParticle: string
+    boxParticle: string,
+    boxFallback: string,
+    blueParticle: string,
+    blueFallback: string,
+    redParticle: string,
+    redFallback: string
 ): void {
     const halfW = DroppedItemOutlineConfig.boxWidth / 2;
     const height = DroppedItemOutlineConfig.boxHeight;
@@ -629,30 +309,31 @@ function renderJavaDebugParticles(
     const minZ = pos.z - halfW;
     const maxZ = pos.z + halfW;
 
+    // Density steps along each 0.25m edge (step size ~0.05m ensures unbroken continuous lines)
     const edgeSteps = 4;
 
     // 1. Bottom perimeter edges (Y = minY)
-    spawnParticleLine(dimension, boxParticle, { x: minX, y: minY, z: minZ }, { x: maxX, y: minY, z: minZ }, edgeSteps);
-    spawnParticleLine(dimension, boxParticle, { x: minX, y: minY, z: maxZ }, { x: maxX, y: minY, z: maxZ }, edgeSteps);
-    spawnParticleLine(dimension, boxParticle, { x: minX, y: minY, z: minZ }, { x: minX, y: minY, z: maxZ }, edgeSteps);
-    spawnParticleLine(dimension, boxParticle, { x: maxX, y: minY, z: minZ }, { x: maxX, y: minY, z: maxZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: minX, y: minY, z: minZ }, { x: maxX, y: minY, z: minZ }, edgeSteps, boxFallback);
+    spawnLine(dimension, boxParticle, { x: minX, y: minY, z: maxZ }, { x: maxX, y: minY, z: maxZ }, edgeSteps, boxFallback);
+    spawnLine(dimension, boxParticle, { x: minX, y: minY, z: minZ }, { x: minX, y: minY, z: maxZ }, edgeSteps, boxFallback);
+    spawnLine(dimension, boxParticle, { x: maxX, y: minY, z: minZ }, { x: maxX, y: minY, z: maxZ }, edgeSteps, boxFallback);
 
     // 2. Top perimeter edges (Y = maxY)
-    spawnParticleLine(dimension, boxParticle, { x: minX, y: maxY, z: minZ }, { x: maxX, y: maxY, z: minZ }, edgeSteps);
-    spawnParticleLine(dimension, boxParticle, { x: minX, y: maxY, z: maxZ }, { x: maxX, y: maxY, z: maxZ }, edgeSteps);
-    spawnParticleLine(dimension, boxParticle, { x: minX, y: maxY, z: minZ }, { x: minX, y: maxY, z: maxZ }, edgeSteps);
-    spawnParticleLine(dimension, boxParticle, { x: maxX, y: maxY, z: minZ }, { x: maxX, y: maxY, z: maxZ }, edgeSteps);
+    spawnLine(dimension, boxParticle, { x: minX, y: maxY, z: minZ }, { x: maxX, y: maxY, z: minZ }, edgeSteps, boxFallback);
+    spawnLine(dimension, boxParticle, { x: minX, y: maxY, z: maxZ }, { x: maxX, y: maxY, z: maxZ }, edgeSteps, boxFallback);
+    spawnLine(dimension, boxParticle, { x: minX, y: maxY, z: minZ }, { x: minX, y: maxY, z: maxZ }, edgeSteps, boxFallback);
+    spawnLine(dimension, boxParticle, { x: maxX, y: maxY, z: minZ }, { x: maxX, y: maxY, z: maxZ }, edgeSteps, boxFallback);
 
-    // 3. Four vertical corner pillars
-    spawnParticleLine(dimension, boxParticle, { x: minX, y: minY, z: minZ }, { x: minX, y: maxY, z: minZ }, edgeSteps);
-    spawnParticleLine(dimension, boxParticle, { x: maxX, y: minY, z: minZ }, { x: maxX, y: maxY, z: minZ }, edgeSteps);
-    spawnParticleLine(dimension, boxParticle, { x: minX, y: minY, z: maxZ }, { x: minX, y: maxY, z: maxZ }, edgeSteps);
-    spawnParticleLine(dimension, boxParticle, { x: maxX, y: minY, z: maxZ }, { x: maxX, y: maxY, z: maxZ }, edgeSteps);
+    // 3. Four vertical corner pillars (connecting bottom to top)
+    spawnLine(dimension, boxParticle, { x: minX, y: minY, z: minZ }, { x: minX, y: maxY, z: minZ }, edgeSteps, boxFallback);
+    spawnLine(dimension, boxParticle, { x: maxX, y: minY, z: minZ }, { x: maxX, y: maxY, z: minZ }, edgeSteps, boxFallback);
+    spawnLine(dimension, boxParticle, { x: minX, y: minY, z: maxZ }, { x: minX, y: maxY, z: maxZ }, edgeSteps, boxFallback);
+    spawnLine(dimension, boxParticle, { x: maxX, y: minY, z: maxZ }, { x: maxX, y: maxY, z: maxZ }, edgeSteps, boxFallback);
 
-    // Eye height for item entities
+    // Eye height for item entities in Java Edition is ~0.21m
     const eyeY = minY + height * 0.85;
 
-    // Resolve look vector
+    // Resolve look vector / facing direction
     let viewDir = { x: 0, y: 0, z: 1 };
     try {
         const vd = itemEntity.getViewDirection();
@@ -674,7 +355,7 @@ function renderJavaDebugParticles(
     const ny = vLen > 0.001 ? viewDir.y / vLen : 0;
     const nz = vLen > 0.001 ? viewDir.z / vLen : 1;
 
-    // 4. Blue Line: Look Direction
+    // 4. Blue Line: Look Direction / Line of Sight Vector (Signature Java F3+B)
     if (DroppedItemOutlineConfig.showLookVector) {
         const eyePos: Vector3 = { x: pos.x, y: eyeY, z: pos.z };
         const vectorLength = DroppedItemOutlineConfig.lookVectorLength || 0.45;
@@ -684,11 +365,10 @@ function renderJavaDebugParticles(
             z: eyePos.z + nz * vectorLength,
         };
 
-        const blueParticle = DroppedItemOutlineConfig.lookVectorParticle || "minecraft:blue_flame_particle";
-        spawnParticleLine(dimension, blueParticle, eyePos, targetPos, 5, "minecraft:endrod");
+        spawnLine(dimension, blueParticle, eyePos, targetPos, 5, blueFallback);
     }
 
-    // 5. Red Line: Front face eye-level indicator
+    // 5. Red Line: Horizontal eye-level indicator across front face (Signature Java F3+B)
     if (DroppedItemOutlineConfig.showEyeHeight) {
         const hLen = Math.sqrt(nx * nx + nz * nz);
         const perpX = hLen > 0.001 ? (-nz / hLen) * halfW : halfW;
@@ -707,13 +387,12 @@ function renderJavaDebugParticles(
             z: pos.z + frontZ + perpZ,
         };
 
-        const redParticle = DroppedItemOutlineConfig.eyeHeightParticle || "minecraft:redstone_wire_dust_particle";
-        spawnParticleLine(dimension, redParticle, redStart, redEnd, 3, "minecraft:basic_flame_particle");
+        spawnLine(dimension, redParticle, redStart, redEnd, 3, redFallback);
     }
 
     // Optional legacy center axis
     if (DroppedItemOutlineConfig.showCenterAxis) {
-        safeSpawnParticle(dimension, "minecraft:endrod", { x: pos.x, y: maxY + 0.08, z: pos.z });
+        safeSpawnParticle(dimension, boxParticle, { x: pos.x, y: maxY + 0.08, z: pos.z }, boxFallback);
     }
 }
 
@@ -733,23 +412,38 @@ function updateItemDebugVisuals(itemEntity: Entity, currentTick: number): void {
 
     const itemStack = itemComp.itemStack;
     const rarity = getItemRarity(itemStack);
-    const boxColor = DroppedItemOutlineConfig.colorByRarity && !DroppedItemOutlineConfig.javaDebugStyle
-        ? rarity.overlayColor
-        : DroppedItemOutlineConfig.overlayBoxColor;
 
+    const isOverlayMode = DroppedItemOutlineConfig.renderMode === "overlay";
     const boxParticle = DroppedItemOutlineConfig.colorByRarity && !DroppedItemOutlineConfig.javaDebugStyle
         ? rarity.particleId
-        : (DroppedItemOutlineConfig.defaultParticle || "minecraft:endrod");
+        : (isOverlayMode ? (DroppedItemOutlineConfig.defaultParticle || "qol:debug_line_white") : "minecraft:endrod");
+    const boxFallback = "minecraft:endrod";
+
+    const blueParticle = isOverlayMode
+        ? (DroppedItemOutlineConfig.lookVectorParticle || "qol:debug_line_blue")
+        : "minecraft:blue_flame_particle";
+    const blueFallback = "minecraft:blue_flame_particle";
+
+    const redParticle = isOverlayMode
+        ? (DroppedItemOutlineConfig.eyeHeightParticle || "qol:debug_line_red")
+        : "minecraft:redstone_wire_dust_particle";
+    const redFallback = "minecraft:redstone_wire_dust_particle";
 
     const pos = itemEntity.location;
 
     // 1. Render Java F3+B debug wireframe bounding box
-    if (DroppedItemOutlineConfig.renderMode === "overlay") {
-        renderJavaDebugOverlay(itemEntity, currentTick, boxColor);
-    } else {
-        if (DroppedItemOutlineConfig.showWireframeBox) {
-            renderJavaDebugParticles(itemEntity.dimension, itemEntity, pos, boxParticle);
-        }
+    if (DroppedItemOutlineConfig.showWireframeBox) {
+        renderJavaDebugOutline(
+            itemEntity.dimension,
+            itemEntity,
+            pos,
+            boxParticle,
+            boxFallback,
+            blueParticle,
+            blueFallback,
+            redParticle,
+            redFallback
+        );
     }
 
     // 2. Render floating debug info tag (if enabled)
@@ -787,15 +481,19 @@ function updateItemDebugVisuals(itemEntity: Entity, currentTick: number): void {
  */
 function clearAllDebugTags(): void {
     const players = world.getAllPlayers();
+    const radius = DroppedItemOutlineConfig.radius;
+
     for (const player of players) {
         if (!player.isValid) continue;
+
         try {
-            const nearby = player.dimension.getEntities({
+            const nearbyItems = player.dimension.getEntities({
                 location: player.location,
-                maxDistance: DroppedItemOutlineConfig.radius,
+                maxDistance: radius,
                 type: "minecraft:item",
             });
-            for (const item of nearby) {
+
+            for (const item of nearbyItems) {
                 if (item.isValid) {
                     item.nameTag = "";
                 }
@@ -841,15 +539,6 @@ function processDroppedItemsTick(): void {
             // Ignore dimension transition errors
         }
     }
-
-    // Clean up active overlays for entities that are no longer nearby or valid
-    if (DroppedItemOutlineConfig.renderMode === "overlay") {
-        for (const [id, entry] of activeItemOverlays.entries()) {
-            if (!entry.entity.isValid || !processedEntityIds.has(id)) {
-                removeOverlayForEntity(id);
-            }
-        }
-    }
 }
 
 /**
@@ -872,18 +561,13 @@ function handleScriptEvent(event: { id: string; message?: string; sourceEntity?:
             if (msg === "mode overlay") {
                 DroppedItemOutlineConfig.renderMode = "overlay";
             } else if (msg === "mode particle") {
-                clearAllOverlays();
                 DroppedItemOutlineConfig.renderMode = "particle";
             } else {
-                if (DroppedItemOutlineConfig.renderMode === "overlay") {
-                    clearAllOverlays();
-                    DroppedItemOutlineConfig.renderMode = "particle";
-                } else {
-                    DroppedItemOutlineConfig.renderMode = "overlay";
-                }
+                DroppedItemOutlineConfig.renderMode =
+                    DroppedItemOutlineConfig.renderMode === "overlay" ? "particle" : "overlay";
             }
             const modeText = DroppedItemOutlineConfig.renderMode === "overlay"
-                ? "§bNative 3D Overlay (Zero Particles)"
+                ? "§bStationary Geometric Overlay"
                 : "§eParticle Wireframes";
             if (player && player.isValid) {
                 player.sendMessage(`§6⚡ [Java Debug] §fOutline Render Mode: ${modeText}`);
@@ -905,18 +589,6 @@ function handleScriptEvent(event: { id: string; message?: string; sourceEntity?:
 
         if (msg === "box" || msg === "hitbox" || msg === "wireframe") {
             DroppedItemOutlineConfig.showWireframeBox = !DroppedItemOutlineConfig.showWireframeBox;
-            if (!DroppedItemOutlineConfig.showWireframeBox) {
-                for (const overlay of activeItemOverlays.values()) {
-                    if (overlay.box) {
-                        try {
-                            overlay.box.remove();
-                        } catch {
-                            // Ignore
-                        }
-                        overlay.box = undefined;
-                    }
-                }
-            }
             const status = DroppedItemOutlineConfig.showWireframeBox ? "§aON" : "§cOFF";
             if (player && player.isValid) {
                 player.sendMessage(`§6⚡ [Java Debug] §fF3+B White Wireframe Bounding Box: ${status}`);
@@ -926,18 +598,6 @@ function handleScriptEvent(event: { id: string; message?: string; sourceEntity?:
 
         if (msg === "vector" || msg === "look" || msg === "blue") {
             DroppedItemOutlineConfig.showLookVector = !DroppedItemOutlineConfig.showLookVector;
-            if (!DroppedItemOutlineConfig.showLookVector) {
-                for (const overlay of activeItemOverlays.values()) {
-                    if (overlay.lookLine) {
-                        try {
-                            overlay.lookLine.remove();
-                        } catch {
-                            // Ignore
-                        }
-                        overlay.lookLine = undefined;
-                    }
-                }
-            }
             const status = DroppedItemOutlineConfig.showLookVector ? "§aON" : "§cOFF";
             if (player && player.isValid) {
                 player.sendMessage(`§6⚡ [Java Debug] §fF3+B Blue Look Vector: ${status}`);
@@ -947,18 +607,6 @@ function handleScriptEvent(event: { id: string; message?: string; sourceEntity?:
 
         if (msg === "eye" || msg === "red") {
             DroppedItemOutlineConfig.showEyeHeight = !DroppedItemOutlineConfig.showEyeHeight;
-            if (!DroppedItemOutlineConfig.showEyeHeight) {
-                for (const overlay of activeItemOverlays.values()) {
-                    if (overlay.eyeLine) {
-                        try {
-                            overlay.eyeLine.remove();
-                        } catch {
-                            // Ignore
-                        }
-                        overlay.eyeLine = undefined;
-                    }
-                }
-            }
             const status = DroppedItemOutlineConfig.showEyeHeight ? "§aON" : "§cOFF";
             if (player && player.isValid) {
                 player.sendMessage(`§6⚡ [Java Debug] §fF3+B Red Eye Height Line: ${status}`);
@@ -971,7 +619,6 @@ function handleScriptEvent(event: { id: string; message?: string; sourceEntity?:
         const statusText = isFeatureEnabled ? "§aENABLED" : "§cDISABLED";
 
         if (!isFeatureEnabled) {
-            clearAllOverlays();
             clearAllDebugTags();
         }
 
@@ -1010,7 +657,6 @@ export function initDroppedItemOutlineFeature(): void {
     world.afterEvents.entityRemove.subscribe((event) => {
         if (event.typeId === "minecraft:item") {
             itemSpawnTicks.delete(event.removedEntityId);
-            removeOverlayForEntity(event.removedEntityId);
         }
     });
 
