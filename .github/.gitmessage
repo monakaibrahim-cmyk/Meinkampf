@@ -1,0 +1,24 @@
+# <type>(<scope>): <short summary in imperative mood (max 72 chars)>
+# -----------------------------------------------------------------
+# Types: feat, fix, perf, refactor, style, docs, test, ci, build, chore
+# Scopes: campfire, afk, sorter, auto-bucket, auto-totem, auto-shield,
+#         lighting, farming, vein-miner, tree-capitator, fishing, config, pack, deps
+# Example: feat(afk): add mob avoidance and temporary invincibility
+# -----------------------------------------------------------------
+
+# Explain the *why* and *what* of the change (wrap at ~72 chars):
+# - What problem does this solve, or what feature is introduced?
+# - How does this approach solve it?
+# - Any important edge cases or gameplay balance decisions made?
+
+# Context, Breaking Changes, or References (optional):
+# - Closes #123
+# - Relates to Discord discussion in #dev-logs
+# - BREAKING CHANGE: <explanation if breaking save/behavior compatibility>
+
+# -----------------------------------------------------------------
+# REMINDER BEFORE COMMITTING:
+# 1. Target the 'development' branch for new features and fixes!
+# 2. Run 'npm run typecheck' to verify TypeScript validity.
+# 3. Run 'npm run build' to bundle the scripts.
+# -----------------------------------------------------------------
