@@ -23,3 +23,7 @@ Thumbs.db
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Temporary release notes
+prerelease_notes.md
+release_notes.md
