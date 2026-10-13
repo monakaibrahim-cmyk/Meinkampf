@@ -126,7 +126,7 @@ function getMetadata() {
             changelogFile = versionChangelog;
         } else {
             const fallbackPath = "release_notes.md";
-            writeFileSync(fallbackPath, `### Release v${version}\n\nSee release history in [update/README.md](update/README.md).\n`, "utf8");
+            writeFileSync(fallbackPath, `### Release v${version}\n\nSee release history in the \`update/\` directory.\n`, "utf8");
             changelogFile = fallbackPath;
         }
     }

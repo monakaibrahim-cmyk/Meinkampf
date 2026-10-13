@@ -61,8 +61,7 @@ function findPatchNotesFile(targetVersion) {
     const candidates = [
         resolve(rootDir, `update/v${targetVersion}.md`),
         resolve(rootDir, "prerelease_notes.md"),
-        resolve(rootDir, "release_notes.md"),
-        resolve(rootDir, "update/README.md")
+        resolve(rootDir, "release_notes.md")
     ];
 
     for (const cand of candidates) {

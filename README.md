@@ -136,12 +136,6 @@ Build artifacts are generated in [`dist/`](dist/):
 
 ---
 
-## Changelog
-
-See [`update/README.md`](update/README.md) for release history and [`update/v1.0.3.md`](update/v1.0.3.md) for the latest release notes.
-
----
-
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
