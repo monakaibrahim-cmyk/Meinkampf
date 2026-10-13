@@ -480,7 +480,7 @@ function handleEntityHurt(event: { hurtEntity: any }): void {
 
 /**
  * Listens for script event commands (/scriptevent qol:elytra_swap or /scriptevent qol:swap).
- * Connects directly to custom PC hotkeys, macros, and on-screen HUD buttons.
+ * Connects directly to custom PC hotkeys, macros, and command blocks.
  */
 function handleScriptEvent(event: { id: string; sourceEntity?: any }): void {
     if (!SmartElytraConfig.enabled || !SmartElytraConfig.manualSwitch.enabled) return;
@@ -489,8 +489,7 @@ function handleScriptEvent(event: { id: string; sourceEntity?: any }): void {
     if (
         event.id === "qol:elytra_swap" ||
         event.id === "qol:swap" ||
-        event.id === "qol:elytra" ||
-        event.id === "button.elytra_swap_click"
+        event.id === "qol:elytra"
     ) {
         const player = event.sourceEntity;
         if (player && player.isValid && player.typeId === "minecraft:player") {
@@ -526,7 +525,7 @@ export function initSmartElytraFeature(): void {
         handleEntityHurt(event);
     });
 
-    // 5. ScriptEvent listener (/scriptevent qol:elytra_swap, HUD buttons)
+    // 5. ScriptEvent listener (/scriptevent qol:elytra_swap or /scriptevent qol:swap)
     system.afterEvents.scriptEventReceive.subscribe((event) => {
         handleScriptEvent(event);
     });

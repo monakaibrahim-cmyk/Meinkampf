@@ -57,7 +57,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 * **Auto Water Bucket (MLG Clutch)**: Automatically performs an MLG water bucket clutch when falling from heights that would cause damage or death. Places water right before impact to negate all fall damage, then auto-retrieves it into the bucket 3 ticks later to prevent flooding.
 * **Immortal Pets**: Tamed pets and mounts are protected against fatal damage.
 * **AFK Protection (Experimental)**: Automatically detects when a player goes idle (no movement or camera rotation for 60s). Grants temporary invincibility against all damage causes (mobs, fire, lava, drowning, explosions, fall damage, starvation) and makes hostile mobs ignore and repel away from the AFK player. Resumes normal play instantly upon moving or taking action. Includes optional automatic kick for idle players on Realms or Dedicated Servers with countdown warning on the action bar, with strict exemption for local play (singleplayer). Fully supports singleplayer worlds running AI companion or simulated player addons (e.g. Understudy, GameTest bots) by filtering out bots to accurately detect local play.
-* **Smart Elytra & Chestplate Switch (Experimental)**: Seamlessly swaps between an equipped Elytra and protective chestplate without opening or organizing your inventory. Context-aware intelligent switching auto-equips Elytra when airborne (jumping in mid-air, falling, or using a firework rocket) and automatically restores your best chestplate upon safe landing or when taking mob damage on the ground. Includes broken-Elytra durability protection (<= 1 durability). Manual switching is supported via on-screen HUD button for mobile touch screens, Double-Sneak (Shift x2 / Crouch x2), Sneak + Jump (Shift + Space), and configurable PC hotkeys/macros via `/scriptevent qol:elytra_swap`.
+* **Smart Elytra & Chestplate Switch (Experimental)**: Seamlessly swaps between an equipped Elytra and protective chestplate without opening or organizing your inventory. Context-aware intelligent switching auto-equips Elytra when airborne (jumping in mid-air, falling, or using a firework rocket) and automatically restores your best chestplate upon safe landing or when taking mob damage on the ground. Includes broken-Elytra durability protection (<= 1 durability). Manual switching is supported via Double-Sneak (Shift x2 on PC, Crouch x2 on Mobile touch controls), Sneak + Jump (Shift + Space), and configurable PC hotkeys/macros via `/scriptevent qol:elytra_swap` or `/scriptevent qol:swap`.
 
 ---
 
@@ -73,7 +73,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 | **Right-Click Harvest** | Right-click mature crops, berry bushes, or cave vines |
 | **Vein Mine** | Crouch (sneak) while breaking ore blocks with a pickaxe |
 | **Tree Capitator** | Break a tree trunk with an axe |
-| **Elytra / Chestplate Switch** | On-screen HUD button (mobile), Double-Sneak (Shift x2), Sneak + Jump, or `/scriptevent qol:elytra_swap` |
+| **Elytra / Chestplate Switch** | Double-Sneak (Shift x2 / Crouch x2), Sneak + Jump, or `/scriptevent qol:elytra_swap` |
 
 ---
 
@@ -90,7 +90,7 @@ Available configurations include:
 * `TreeCapitatorConfig` — Max log limits, leaf decay filtering, and sapling spacing.
 * `AutoWaterBucketConfig` — Fall detection sensitivity, clutch trigger distance, and auto-retrieve timing.
 * `AfkProtectionConfig` — Inactivity idle threshold, invincibility duration, mob repel force, status effects, Realm/Server AFK kick timeout, and AI / simulated player bot support.
-* `SmartElytraConfig` — Auto-flight triggers, landing delays, combat defense, on-screen button, hotkey modes, and broken-Elytra protection.
+* `SmartElytraConfig` — Auto-flight triggers, landing delays, combat defense, hotkey modes, and broken-Elytra protection.
 
 ---
 
