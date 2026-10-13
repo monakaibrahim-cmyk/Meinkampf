@@ -32,9 +32,10 @@ const playerHotbarProtected = new Map<string, boolean>();
 const SORTER_ITEM_NAME = "§l§6⚡ Quick Sorter§r";
 
 /**
- * Creates the official Sorter tool item with custom name, lore, keepOnDeath, and inventory lock.
+ * Creates the base Sorter tool item with custom name, lore, and keepOnDeath.
+ * Does NOT set ItemLockMode so it can be safely inserted into containers without transaction rejection.
  */
-export function createSorterItem(): ItemStack {
+export function createCleanSorterItem(): ItemStack {
     let item: ItemStack;
     try {
         item = new ItemStack("qol:quick_sorter", 1);
@@ -49,11 +50,48 @@ export function createSorterItem(): ItemStack {
     ]);
     try {
         item.keepOnDeath = true;
+    } catch {
+        // Fallback
+    }
+    return item;
+}
+
+/**
+ * Creates the official Sorter tool item with custom name, lore, keepOnDeath, and inventory lock.
+ */
+export function createSorterItem(): ItemStack {
+    const item = createCleanSorterItem();
+    try {
         item.lockMode = ItemLockMode.inventory;
     } catch {
         // Fallback
     }
     return item;
+}
+
+/**
+ * Safely locks and marks keepOnDeath on a sorter item in a container slot.
+ */
+export function applyLockFlagsToSlot(container: Container, slot: number): void {
+    try {
+        const item = container.getItem(slot);
+        if (item && isSorterItem(item)) {
+            let changed = false;
+            if (!item.keepOnDeath) {
+                item.keepOnDeath = true;
+                changed = true;
+            }
+            if (item.lockMode !== ItemLockMode.inventory) {
+                item.lockMode = ItemLockMode.inventory;
+                changed = true;
+            }
+            if (changed) {
+                container.setItem(slot, item);
+            }
+        }
+    } catch {
+        // Ignore
+    }
 }
 
 /**
@@ -111,30 +149,176 @@ export function getPlayerContainer(player: Player): Container | undefined {
 }
 
 /**
- * Gives a Quick Sorter item to the player if they don't already have one.
+ * Audits the player's inventory and offhand for the Quick Sorter.
+ * - Guarantees keepOnDeath and ItemLockMode.inventory.
+ * - Upgrades legacy compass sorters.
+ * - Removes any duplicate sorters if more than one exists.
+ * Returns true if the player possesses a Quick Sorter.
  */
-export function giveSorterItemToPlayer(player: Player, notify = true): void {
-    const container = getPlayerContainer(player);
-    if (!container) return;
+export function auditPlayerSorter(player: Player): boolean {
+    if (!player || !player.isValid) return false;
 
-    for (let i = 0; i < container.size; i++) {
-        const item = container.getItem(i);
-        if (isSorterItem(item)) {
-            if (notify) {
-                showPlayerNotification(player, "§e⚡ You already have a Quick Sorter in your inventory!");
+    let hasOne = false;
+    const container = getPlayerContainer(player);
+    if (container) {
+        for (let i = 0; i < container.size; i++) {
+            const item = container.getItem(i);
+            if (item && isSorterItem(item)) {
+                if (!hasOne) {
+                    hasOne = true;
+                    // Upgrade legacy compass to custom item
+                    if (item.typeId === "minecraft:compass") {
+                        try {
+                            const upgraded = createCleanSorterItem();
+                            container.setItem(i, upgraded);
+                        } catch {
+                            // Keep compass
+                        }
+                    }
+                    applyLockFlagsToSlot(container, i);
+                } else {
+                    // Remove duplicate sorter from container
+                    try {
+                        container.setItem(i, undefined);
+                    } catch {
+                        // Ignore
+                    }
+                }
             }
-            return;
         }
     }
 
-    const sorter = createSorterItem();
-    const leftover = container.addItem(sorter);
-    if (leftover && leftover.amount > 0) {
-        player.dimension.spawnItem(sorter, player.location);
+    // Check equippable offhand and mainhand
+    try {
+        const eq = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
+        if (eq) {
+            const offhand = eq.getEquipment(EquipmentSlot.Offhand);
+            if (offhand && isSorterItem(offhand)) {
+                if (!hasOne) {
+                    hasOne = true;
+                    let changed = false;
+                    if (!offhand.keepOnDeath) {
+                        offhand.keepOnDeath = true;
+                        changed = true;
+                    }
+                    if (offhand.lockMode !== ItemLockMode.inventory) {
+                        offhand.lockMode = ItemLockMode.inventory;
+                        changed = true;
+                    }
+                    if (changed) {
+                        try {
+                            eq.setEquipment(EquipmentSlot.Offhand, offhand);
+                        } catch {}
+                    }
+                } else {
+                    // Remove duplicate from offhand
+                    try {
+                        eq.setEquipment(EquipmentSlot.Offhand, undefined);
+                    } catch {}
+                }
+            }
+
+            const mainhand = eq.getEquipment(EquipmentSlot.Mainhand);
+            if (mainhand && isSorterItem(mainhand)) {
+                hasOne = true;
+            }
+        }
+    } catch {
+        // Ignore
     }
-    if (notify) {
-        showPlayerNotification(player, "§a✔ Added §6⚡ Quick Sorter§a to your inventory!");
+
+    return hasOne;
+}
+
+/**
+ * Checks if a player currently has the Quick Sorter in their inventory or offhand.
+ */
+export function hasSorterItem(player: Player): boolean {
+    return auditPlayerSorter(player);
+}
+
+/**
+ * Gives a Quick Sorter item to the player if they don't already have one.
+ * Safely inserts the item into the player's container (preferring hotbar slot 8 or first empty slot)
+ * and locks it in place. Returns true if the player has or received the item.
+ */
+export function giveSorterItemToPlayer(player: Player, notify = true): boolean {
+    if (!player || !player.isValid) return false;
+
+    // Check if player already has one (also handles cleanup of duplicates & sets flags)
+    if (hasSorterItem(player)) {
+        if (notify) {
+            showPlayerNotification(player, "§e⚡ You already have a Quick Sorter in your inventory!");
+        }
+        return true;
     }
+
+    const container = getPlayerContainer(player);
+    if (!container) return false;
+
+    // Determine target slot: prefer slot 8 (last hotbar slot) or first empty slot
+    let targetSlot = -1;
+    if (!container.getItem(8)) {
+        targetSlot = 8;
+    } else {
+        for (let i = 0; i < container.size; i++) {
+            if (!container.getItem(i)) {
+                targetSlot = i;
+                break;
+            }
+        }
+    }
+
+    let success = false;
+
+    if (targetSlot !== -1) {
+        // Attempt 1: set clean item into the slot, then apply lock flags
+        try {
+            const cleanSorter = createCleanSorterItem();
+            container.setItem(targetSlot, cleanSorter);
+            applyLockFlagsToSlot(container, targetSlot);
+            success = true;
+        } catch {
+            // Attempt 2: set item with lockMode directly
+            try {
+                const lockedSorter = createSorterItem();
+                container.setItem(targetSlot, lockedSorter);
+                success = true;
+            } catch {
+                success = false;
+            }
+        }
+    }
+
+    // Attempt 3: if direct slot assignment failed or no explicit empty slot was found, try container.addItem
+    if (!success) {
+        try {
+            const cleanSorter = createCleanSorterItem();
+            const leftover = container.addItem(cleanSorter);
+            if (!leftover || leftover.amount === 0) {
+                // Find where it was placed and apply flags
+                for (let i = 0; i < container.size; i++) {
+                    const item = container.getItem(i);
+                    if (item && isSorterItem(item)) {
+                        applyLockFlagsToSlot(container, i);
+                        break;
+                    }
+                }
+                success = true;
+            }
+        } catch {
+            // addItem failed
+        }
+    }
+
+    if (success) {
+        if (notify) {
+            showPlayerNotification(player, "§a✔ Added §6⚡ Quick Sorter§a to your inventory!");
+        }
+        return true;
+    }
+
+    return false;
 }
 
 /**
@@ -149,47 +333,59 @@ export function initInventorySortingFeature(): void {
             const player = event.player;
             if (!player || !player.isValid) return;
 
-            const container = getPlayerContainer(player);
-            let hasSorter = false;
-
-            if (container) {
-                for (let i = 0; i < container.size; i++) {
-                    const item = container.getItem(i);
-                    if (item && isSorterItem(item)) {
-                        hasSorter = true;
-                        let updated = false;
-                        if (!item.keepOnDeath) {
-                            item.keepOnDeath = true;
-                            updated = true;
-                        }
-                        if (item.lockMode !== ItemLockMode.inventory) {
-                            item.lockMode = ItemLockMode.inventory;
-                            updated = true;
-                        }
-                        // Upgrade legacy compass to custom item
-                        if (item.typeId === "minecraft:compass") {
-                            try {
-                                const upgraded = createSorterItem();
-                                container.setItem(i, upgraded);
-                                updated = false;
-                            } catch {
-                                // Keep compass
-                            }
-                        }
-                        if (updated) {
-                            container.setItem(i, item);
-                        }
-                    }
-                }
+            // Immediate attempt (works if container is already ready)
+            if (InventorySortingConfig.giveSorterOnSpawn && !hasSorterItem(player)) {
+                giveSorterItemToPlayer(player, false);
             }
 
-            if (!hasSorter && InventorySortingConfig.giveSorterOnSpawn) {
-                giveSorterItemToPlayer(player, false);
+            // Staggered retries for newly created worlds and player dimension loading:
+            // Tick 5 (~0.25s), Tick 15 (~0.75s), Tick 30 (~1.5s), Tick 60 (~3.0s)
+            // Ensures player inventory initialization / starting map generation has settled
+            const retryTicks = [5, 15, 30, 60];
+            for (const delay of retryTicks) {
+                system.runTimeout(() => {
+                    try {
+                        if (!player || !player.isValid) return;
+                        if (InventorySortingConfig.giveSorterOnSpawn && !hasSorterItem(player)) {
+                            giveSorterItemToPlayer(player, false);
+                        }
+                    } catch {
+                        // Ignore
+                    }
+                }, delay);
             }
         } catch {
             // Ignore
         }
     });
+
+    // Initial check for all active players on script startup / reload
+    system.runTimeout(() => {
+        try {
+            if (!InventorySortingConfig.enabled || !InventorySortingConfig.giveSorterOnSpawn) return;
+            for (const player of world.getAllPlayers()) {
+                if (player && player.isValid && !hasSorterItem(player)) {
+                    giveSorterItemToPlayer(player, false);
+                }
+            }
+        } catch {
+            // Ignore
+        }
+    }, 20);
+
+    // Periodic safety net every 5 seconds (100 ticks)
+    system.runInterval(() => {
+        try {
+            if (!InventorySortingConfig.enabled || !InventorySortingConfig.giveSorterOnSpawn) return;
+            for (const player of world.getAllPlayers()) {
+                if (player && player.isValid && !hasSorterItem(player)) {
+                    giveSorterItemToPlayer(player, false);
+                }
+            }
+        } catch {
+            // Ignore
+        }
+    }, 100);
 
     // 2. Anti-duplication: intercept dropped Quick Sorter item entities and remove them
     world.afterEvents.entitySpawn.subscribe((event) => {
