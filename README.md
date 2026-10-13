@@ -52,7 +52,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 * **Auto Totem**: Triggers Totem of Undying protection from inventory without overriding the offhand equipment slot.
 * **Auto Shield**: Raises an equipped shield against incoming attacks.
 * **Auto Fishing**: Detects bobber movement and recasts automatically.
-* **Campfire Defense & Healing**: Lit campfires provide area-of-effect regeneration for players, pets, neutral mobs (e.g. iron golems, bees, pandas), and passive mobs (e.g. livestock, villagers), while repelling and damaging hostile mobs within 10 blocks.
+* **Campfire Defense, Healing & Debuffs**: Lit campfires provide area-of-effect regeneration for players, pets, neutral mobs (e.g. iron golems, bees, pandas), and passive mobs (e.g. livestock, villagers). Hostile mobs within 10 blocks are repelled, kept continuously on fire (3s duration), take campfire damage, and receive tactical debuffs (Slowness, Weakness, Mining Fatigue, anti-regen suppression, and soul smoke Blindness). Named hostile mobs (custom name tags) are completely exempt from damage, burning, debuffs, and knockback to protect trophy mobs and farm setups (e.g. iron farm zombies).
 * **Vein Miner**: Mining ores while sneaking harvests connected ore veins.
 * **Tree Capitator**: Fells standing trees and naturally fallen logs, featuring species-matched leaf decay and automatic sapling replanting.
 * **Durability Freezing**: Freezes tool, weapon, and armor durability wear while fully repaired.

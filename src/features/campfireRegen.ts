@@ -21,6 +21,20 @@ interface TrackedCampfireMob {
 // Track hostiles currently or previously influenced by lit campfires
 const trackedCampfireHostiles = new Map<string, TrackedCampfireMob>();
 
+// Tracks previous health values of hostile mobs to suppress health regeneration
+const mobLastRecordedHealth = new Map<string, number>();
+
+/**
+ * Checks if an entity has been given a custom name tag by a player.
+ */
+export function isNamedEntity(entity: Entity): boolean {
+    try {
+        return Boolean(entity && entity.isValid && entity.nameTag && entity.nameTag.trim().length > 0);
+    } catch {
+        return false;
+    }
+}
+
 interface KnownCampfire {
     x: number;
     y: number;
@@ -304,11 +318,12 @@ export function processCampfireRegeneration(): void {
                 }
             }
 
-            // Burn hostile mobs that venture within burnHostilesRadius of the lit campfire
+            // Burn and debuff hostile mobs that venture within burnHostilesRadius of the lit campfire
             if (CampfireRegenConfig.burnHostiles && nearestCampfire) {
                 const firePos = nearestCampfire.location;
                 const cCenter: Vector3 = { x: firePos.x + 0.5, y: firePos.y + 0.5, z: firePos.z + 0.5 };
                 const burnRadius = CampfireRegenConfig.burnHostilesRadius ?? 10;
+                const burnDuration = CampfireRegenConfig.burnHostileDurationSeconds ?? 3;
                 try {
                     const hostiles = dim.getEntities({
                         location: cCenter,
@@ -318,10 +333,15 @@ export function processCampfireRegeneration(): void {
                     for (const mob of hostiles) {
                         if (!mob || !mob.isValid || mob.id === player.id) continue;
                         if (HOSTILE_MOBS.has(mob.typeId)) {
+                            // Completely exempt named hostile mobs from campfire burning, damage, debuffs, and knockback
+                            if (CampfireRegenConfig.exemptNamedHostiles && isNamedEntity(mob)) {
+                                continue;
+                            }
+
                             currentMobsInRange.add(mob.id);
 
-                            // While inside radius, continuously keep on fire for 1s
-                            mob.setOnFire(1, true);
+                            // Continuously keep burning duration at full duration (3s) even while inside the radius
+                            mob.setOnFire(burnDuration, true);
 
                             // Deal campfire damage indefinitely every second while inside the radius
                             if (!damagedMobsThisCycle.has(mob.id)) {
@@ -332,6 +352,115 @@ export function processCampfireRegeneration(): void {
                                     mob.applyDamage(baseDmg, { cause: EntityDamageCause.campfire });
                                 } catch {
                                     // Entity dead or invulnerable
+                                }
+                            }
+
+                            // Apply balanced status debuffs to hostile mobs inside campfire radius
+                            if (CampfireRegenConfig.debuffHostiles) {
+                                const isSoul = nearestCampfire.typeId === "minecraft:soul_campfire";
+                                const debuffTicks = (CampfireRegenConfig.debuffDurationSeconds ?? burnDuration) * 20;
+
+                                // 1. Slowness: slow movement speed (Slowness I for normal, Slowness II for soul)
+                                if (CampfireRegenConfig.debuffSlowness) {
+                                    try {
+                                        mob.addEffect("minecraft:slowness", debuffTicks, {
+                                            amplifier: isSoul ? 1 : 0,
+                                            showParticles: false,
+                                        });
+                                    } catch {
+                                        try {
+                                            mob.addEffect("slowness", debuffTicks, {
+                                                amplifier: isSoul ? 1 : 0,
+                                                showParticles: false,
+                                            });
+                                        } catch {
+                                            // Fallback
+                                        }
+                                    }
+                                }
+
+                                // 2. Weakness: reduce mob melee attack damage (Weakness I for normal, Weakness II for soul)
+                                if (CampfireRegenConfig.debuffWeakness) {
+                                    try {
+                                        mob.addEffect("minecraft:weakness", debuffTicks, {
+                                            amplifier: isSoul ? 1 : 0,
+                                            showParticles: false,
+                                        });
+                                    } catch {
+                                        try {
+                                            mob.addEffect("weakness", debuffTicks, {
+                                                amplifier: isSoul ? 1 : 0,
+                                                showParticles: false,
+                                            });
+                                        } catch {
+                                            // Fallback
+                                        }
+                                    }
+                                }
+
+                                // 3. Mining Fatigue: slow down attack swing / wind-up speed
+                                if (CampfireRegenConfig.debuffMiningFatigue) {
+                                    try {
+                                        mob.addEffect("minecraft:mining_fatigue", debuffTicks, {
+                                            amplifier: isSoul ? 1 : 0,
+                                            showParticles: false,
+                                        });
+                                    } catch {
+                                        try {
+                                            mob.addEffect("mining_fatigue", debuffTicks, {
+                                                amplifier: isSoul ? 1 : 0,
+                                                showParticles: false,
+                                            });
+                                        } catch {
+                                            // Fallback
+                                        }
+                                    }
+                                }
+
+                                // 4. Mob Regen Suppression: strip regeneration & absorption buffs and revert healed HP
+                                if (CampfireRegenConfig.debuffRegen) {
+                                    try {
+                                        mob.removeEffect("minecraft:regeneration");
+                                        mob.removeEffect("regeneration");
+                                        mob.removeEffect("minecraft:absorption");
+                                        mob.removeEffect("absorption");
+                                    } catch {
+                                        // Ignore
+                                    }
+
+                                    try {
+                                        const healthComp = mob.getComponent(EntityComponentTypes.Health) as EntityHealthComponent | undefined;
+                                        if (healthComp) {
+                                            const prevHp = mobLastRecordedHealth.get(mob.id);
+                                            if (prevHp !== undefined && healthComp.currentValue > prevHp) {
+                                                // Suppress health regeneration by reverting to previous recorded health
+                                                healthComp.setCurrentValue(prevHp);
+                                            } else {
+                                                mobLastRecordedHealth.set(mob.id, healthComp.currentValue);
+                                            }
+                                        }
+                                    } catch {
+                                        // Ignore
+                                    }
+                                }
+
+                                // 5. Soul Campfire special: brief Blindness (2s) to disorient hostile mob targeting in mystic soul smoke
+                                if (isSoul && CampfireRegenConfig.debuffSoulBlindness) {
+                                    try {
+                                        mob.addEffect("minecraft:blindness", 40, {
+                                            amplifier: 0,
+                                            showParticles: false,
+                                        });
+                                    } catch {
+                                        try {
+                                            mob.addEffect("blindness", 40, {
+                                                amplifier: 0,
+                                                showParticles: false,
+                                            });
+                                        } catch {
+                                            // Fallback
+                                        }
+                                    }
                                 }
                             }
 
@@ -371,7 +500,7 @@ export function processCampfireRegeneration(): void {
     }
 
     // Check previously tracked hostiles: if they are now out of range from burnHostilesRadius,
-    // apply burnHostileDurationSeconds lingering burn duration
+    // apply lingering burn duration
     const burnRadius = CampfireRegenConfig.burnHostilesRadius ?? 10;
     const lingerDuration = CampfireRegenConfig.burnHostileDurationSeconds ?? 3;
 
@@ -383,10 +512,21 @@ export function processCampfireRegeneration(): void {
 
         // Hostile is no longer in range of the lit campfire
         trackedCampfireHostiles.delete(mobId);
+        mobLastRecordedHealth.delete(mobId);
 
         try {
             const mob = tracked.entity;
             if (!mob || !mob.isValid) continue;
+
+            // Check if mob was named in the interim
+            if (CampfireRegenConfig.exemptNamedHostiles && isNamedEntity(mob)) {
+                try {
+                    mob.extinguishFire(true);
+                } catch {
+                    // Ignore
+                }
+                continue;
+            }
 
             const mLoc = mob.location;
             const dx = mLoc.x - tracked.campfireLoc.x;
@@ -400,6 +540,15 @@ export function processCampfireRegeneration(): void {
             }
         } catch {
             // Ignore if entity is despawned or dimension unloaded
+        }
+    }
+
+    // Periodic memory cleanup for anti-regen health tracker
+    if (mobLastRecordedHealth.size > 200) {
+        for (const id of mobLastRecordedHealth.keys()) {
+            if (!currentMobsInRange.has(id)) {
+                mobLastRecordedHealth.delete(id);
+            }
         }
     }
 }
@@ -437,6 +586,17 @@ export function initCampfireRegenFeature(): void {
 
             if (isCampfireCause || onCampfire) {
                 if (HOSTILE_MOBS.has(event.hurtEntity.typeId)) {
+                    // Exempt named hostile mobs from campfire damage
+                    if (CampfireRegenConfig.exemptNamedHostiles && isNamedEntity(event.hurtEntity)) {
+                        event.cancel = true;
+                        try {
+                            event.hurtEntity.extinguishFire(true);
+                        } catch {
+                            // Ignore
+                        }
+                        return;
+                    }
+
                     const multiplier = CampfireRegenConfig.hostileDamageMultiplier ?? 3.0;
                     event.damage *= multiplier;
                 }

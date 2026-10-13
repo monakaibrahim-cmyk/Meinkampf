@@ -712,22 +712,72 @@ export const CampfireRegenConfig = {
 
     /**
      * BURN HOSTILE MOBS NEAR CAMPFIRE
-     * Lit campfires actively burn and repel hostile mobs that come within 5 blocks.
+     * Lit campfires actively burn, repel, and debuff hostile mobs that come within radius.
      * Default: true
      */
     burnHostiles: true,
 
     /**
-     * Distance in blocks from lit campfire where hostile mobs catch fire.
+     * Exempt named hostile mobs (custom name tags) from campfire damage, burning, debuffs, and knockback.
+     * Prevents pet hostile mobs, trophy mobs, and nametagged farm mobs (e.g. iron farm zombies) from being harmed.
+     * Default: true
+     */
+    exemptNamedHostiles: true,
+
+    /**
+     * Distance in blocks from lit campfire where hostile mobs catch fire and get debuffed.
      * Default: 10
      */
     burnHostilesRadius: 10,
 
     /**
-     * Duration in seconds hostile mobs burn when approaching a lit campfire.
+     * Duration in seconds hostile mobs burn when approaching or remaining inside lit campfire radius.
+     * Continuously kept at this duration while inside radius and lingers upon exit.
      * Default: 3
      */
     burnHostileDurationSeconds: 3,
+
+    /**
+     * Apply status debuffs to hostile mobs inside the campfire radius.
+     * Default: true
+     */
+    debuffHostiles: true,
+
+    /**
+     * Apply Slowness debuff to hostile mobs (Slowness I for normal campfire, Slowness II for soul campfire).
+     * Default: true
+     */
+    debuffSlowness: true,
+
+    /**
+     * Apply Weakness debuff to hostile mobs, reducing their melee attack damage.
+     * Default: true
+     */
+    debuffWeakness: true,
+
+    /**
+     * Suppress hostile mob regeneration and strip regeneration / absorption effects in campfire radius.
+     * Default: true
+     */
+    debuffRegen: true,
+
+    /**
+     * Apply Mining Fatigue debuff to hostile mobs, slowing their attack swing and wind-up speed.
+     * Default: true
+     */
+    debuffMiningFatigue: true,
+
+    /**
+     * Apply brief disorienting Blindness (2 seconds) to hostile mobs in soul campfire mystical smoke.
+     * Default: true
+     */
+    debuffSoulBlindness: true,
+
+    /**
+     * Duration of debuff effects in seconds (refreshed every second while inside radius).
+     * Default: 3
+     */
+    debuffDurationSeconds: 3,
 
     /**
      * Damage multiplier applied when a hostile mob takes damage from a campfire.
