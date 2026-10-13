@@ -1,0 +1,24 @@
+{
+  "format_version": "1.21.0",
+  "minecraft:item": {
+    "description": {
+      "identifier": "qol:quick_sorter",
+      "menu_category": {
+        "category": "items",
+        "group": "itemGroup.name.misc"
+      }
+    },
+    "components": {
+      "minecraft:icon": {
+        "texture": "qol_quick_sorter"
+      },
+      "minecraft:display_name": {
+        "value": "item.qol:quick_sorter.name"
+      },
+      "minecraft:max_stack_size": 1,
+      "minecraft:hand_equipped": false,
+      "minecraft:glint": true
+    }
+  }
+}
+

@@ -1,0 +1,28 @@
+{
+  "name": "bedrock-qol-suite",
+  "version": "1.0.2",
+  "description": "Modular, high-performance Quality-of-Life add-on suite for Minecraft Bedrock Edition.",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --format=esm --target=es2022 --outfile=behavior_pack/scripts/main.js --external:@minecraft/server --external:@minecraft/server-ui --external:@minecraft/vanilla-data",
+    "watch": "esbuild src/main.ts --bundle --format=esm --target=es2022 --outfile=behavior_pack/scripts/main.js --external:@minecraft/server --external:@minecraft/server-ui --external:@minecraft/vanilla-data --watch",
+    "typecheck": "tsc --noEmit",
+    "pack": "npm run build && node scripts/pack.js"
+  },
+  "keywords": [
+    "minecraft",
+    "bedrock-edition",
+    "bedrock-addon",
+    "qol",
+    "behavior-pack",
+    "resource-pack",
+    "minecraft-server"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@minecraft/core-build-tasks": "^5.7.0",
+    "@minecraft/server": "^2.10.0",
+    "@minecraft/server-ui": "^2.2.0",
+    "@minecraft/vanilla-data": "^1.26.52"
+  }
+}

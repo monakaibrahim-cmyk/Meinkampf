@@ -1,0 +1,10 @@
+{
+  "resource_pack_name": "Bedrock QoL Suite",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "qol_quick_sorter": {
+      "textures": "textures/items/quick_sorter"
+    }
+  }
+}
+
