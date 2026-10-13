@@ -1,27 +1,44 @@
-# Contributing to Bedrock QoL Suite
+# Contributing Guide
 
-Thank you for your interest in contributing to **Bedrock QoL Suite**! We welcome bug reports, feature suggestions, code optimizations, and documentation improvements from the community.
+Thanks for wanting to help make Bedrock QoL Suite better! Whether you're fixing a bug, adding a new feature, or tweaking documentation, contributions are always welcome.
+
+Here's a quick guide to get you set up and make the review process as smooth as possible.
 
 ---
 
-## 🚀 Quick Start
+## Where to Send Changes
 
-1. **Fork & Clone:**
+We do all active development on the **`development`** branch:
+
+* **Always branch off and target `development`** for your pull requests.
+* The `main` branch is reserved for tagged releases and managed by project maintainers. PRs sent directly to `main` will just be asked to switch base to `development`.
+
+```bash
+# Branch off development for your work
+git checkout -b feat/my-cool-feature development
+```
+
+If you're planning to build a large or experimental feature, it's usually a good idea to chat with us first in the [Discord](https://discord.gg/uNsbXYaQB) (`#dev-logs` channel) so we can coordinate and make sure nobody is duplicating work.
+
+---
+
+## Getting Set Up
+
+You'll need Node.js (v20+ recommended) and Git installed.
+
+1. **Fork and clone the repo:**
    ```bash
    git clone https://github.com/<your-username>/Meinkampf.git
    cd Meinkampf
    ```
 
-2. **Install Dependencies & Auto-Configure Git:**
+2. **Install dependencies:**
    ```bash
    npm install
    ```
-   > 💡 Running `npm install` automatically configures Git to use our professional commit message template (`.github/.gitmessage`). You can also manually enable it anytime with:
-   > ```bash
-   > npm run setup:git
-   > ```
+   *(Running `npm install` automatically wires up our Git commit template from `.github/.gitmessage`)*
 
-3. **Verify Setup:**
+3. **Make sure it builds:**
    ```bash
    npm run typecheck
    npm run build
@@ -29,103 +46,45 @@ Thank you for your interest in contributing to **Bedrock QoL Suite**! We welcome
 
 ---
 
-## 🌲 Branching Strategy
+## Making Changes & Testing
 
-To maintain a clean and reliable release cycle, we follow a dual-channel branch workflow:
+Since this is a Minecraft Bedrock Script API addon, in-game verification is the most important part of testing:
 
-| Branch | Purpose | PR Target |
-| :--- | :--- | :--- |
-| **`development`** | Active development, experimental features, alpha/beta builds | **All community PRs should target this branch!** |
-| **`main`** | Production-ready stable releases only (tagged versions) | Maintained exclusively by project leads |
-
-> [!IMPORTANT]
-> Always branch off `development` and create pull requests targeting `development`. Direct PRs to `main` will be asked to re-target `development`.
-
-```bash
-git checkout -b feat/my-new-feature development
-```
+1. **Keep TypeScript types clean:**
+   Run `npm run typecheck` (`tsc --noEmit`) to catch any type errors or broken Bedrock API calls.
+2. **Bundle the scripts:**
+   Run `npm run build` to compile TypeScript into `behavior_pack/scripts/main.js` via esbuild.
+3. **Test in Minecraft:**
+   * Create a test world with **Beta APIs** enabled under Experiments.
+   * Make sure your feature works as expected in survival mode.
+   * Check the content log (Settings &rarr; Creator &rarr; Enable Content Log GUI) to ensure there are no script errors or unhandled exceptions.
+   * Make sure it doesn't cause tick lag or memory leaks with interval timers.
 
 ---
 
-## ✍️ Commit Guidelines
+## Commit Messages
 
-We use [Conventional Commits](https://www.conventionalcommits.org/) to generate automated changelogs and maintain clear history.
+We follow [Conventional Commits](https://www.conventionalcommits.org/) because our CI uses them to generate release notes and alpha preview changelogs.
 
-### Commit Structure
+A good commit looks like:
 ```
-<type>(<scope>): <concise description in imperative mood>
-
-[optional body explaining why and what changed]
-
-[optional footer, e.g. Closes #123, BREAKING CHANGE]
+feat(campfire): add healing for neutral and passive mobs
+fix(sorter): prevent offhand swap desync when closing container
+docs(readme): clarify requirement for beta apis
 ```
 
-### Commit Types
-* `feat`: A new feature or capability
-* `fix`: A bug fix or behavioral patch
-* `perf`: Performance improvement (reduced ticks, memory, caching)
-* `refactor`: Code restructure without changing behavior
-* `docs`: Documentation, README, or code comment updates
-* `style`: Code style, formatting, whitespace
-* `test`: Adding or updating tests
-* `build`: Build system, packaging, esbuild, npm dependencies
-* `ci`: GitHub Actions workflows, CI/CD scripts
-* `chore`: General repository maintenance
-
-### Common Scopes
-`campfire`, `afk`, `sorter`, `auto-bucket`, `auto-totem`, `auto-shield`, `lighting`, `farming`, `vein-miner`, `tree-capitator`, `fishing`, `config`, `pack`
-
-### Auto-Configured Commit Template
-When you run `git commit` (without `-m`), Git will automatically open our standardized template with helpful prompts and reminders.
+* Common types: `feat`, `fix`, `refactor`, `perf`, `docs`, `chore`
+* If you run `git commit` without `-m`, your editor will open with our commit template to help format it.
 
 ---
 
-## 🧪 Testing & Code Standards
-
-Before opening a pull request, ensure your code meets the following quality standards:
-
-1. **Type Safety:**
-   ```bash
-   npm run typecheck
-   ```
-   Must pass with zero TypeScript errors (`tsc --noEmit`).
-
-2. **Bundle Build:**
-   ```bash
-   npm run build
-   ```
-   Ensures esbuild bundles cleanly into `behavior_pack/scripts/main.js`.
-
-3. **Packaging Test:**
-   ```bash
-   npm run pack -- --no-bump
-   ```
-   Verifies that the `.mcaddon` package compiles without manifest errors.
-
-4. **In-Game Testing:**
-   Test your changes in Minecraft Bedrock Edition (1.21+) with **Beta APIs** enabled under World Experiments. Verify:
-   - Feature functions as expected in survival mode.
-   - No script crashes or console errors in the content log.
-   - Smooth performance with no tick desync or memory leaks.
-
----
-
-## 📥 Submitting a Pull Request
+## Sending a Pull Request
 
 1. Push your branch to your fork:
    ```bash
-   git push origin feat/my-new-feature
+   git push origin feat/my-cool-feature
    ```
-2. Open a Pull Request on GitHub targeting the **`development`** branch.
-3. GitHub will automatically populate our **Pull Request Template** (`.github/pull_request_template.md`). Please fill out:
-   - Description and motivation
-   - Type of change
-   - In-game testing details
-   - Checklist items
+2. Open a Pull Request targeting the **`development`** branch on GitHub.
+3. Fill out the PR template with a brief summary of what you changed, how you tested it in-game, and if there are any config options added.
 
----
-
-## 💬 Community & Discussion
-
-Have questions or want to discuss feature designs before writing code?
-Join our **[Official Discord Server](https://discord.gg/uNsbXYaQB)** in the `#dev-logs` or `#general` channels!
+We'll review it as soon as possible. Thanks again for contributing!
