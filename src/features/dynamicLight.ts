@@ -1,10 +1,13 @@
 import {
+    Block,
     BlockPermutation,
     Container,
+    Direction,
     EntityComponentTypes,
     EntityEquippableComponent,
     EntityInventoryComponent,
     EquipmentSlot,
+    GameMode,
     ItemStack,
     Player,
     system,
@@ -48,55 +51,52 @@ export const HELD_LIGHT_SOURCES: Record<string, number> = {
     "minecraft:verdant_froglight": 15,
     "minecraft:glow_berries": 14,
     "minecraft:cave_vines": 14,
-    "minecraft:cave_vines_body_with_berries": 14,
-    "minecraft:cave_vines_head_with_berries": 14,
     "minecraft:glow_lichen": 7,
-    "minecraft:sea_pickle": 6,
+    "minecraft:crimson_fungus": 2,
+    "minecraft:warped_fungus": 2,
 
-    // Copper Bulbs (all oxidation states & waxed variants from 1.21 Tricky Trials)
-    "minecraft:copper_bulb": 15,
-    "minecraft:waxed_copper_bulb": 15,
-    "minecraft:exposed_copper_bulb": 12,
-    "minecraft:waxed_exposed_copper_bulb": 12,
-    "minecraft:weathered_copper_bulb": 8,
-    "minecraft:waxed_weathered_copper_bulb": 8,
-    "minecraft:oxidized_copper_bulb": 4,
-    "minecraft:waxed_oxidized_copper_bulb": 4,
-
-    // Amethyst Crystals
+    // Minerals, Redstone & End Items
     "minecraft:amethyst_cluster": 5,
     "minecraft:large_amethyst_bud": 4,
     "minecraft:medium_amethyst_bud": 2,
     "minecraft:small_amethyst_bud": 1,
-
-    // Nether, End & Mystical Blocks
+    "minecraft:redstone_ore": 9,
+    "minecraft:lit_redstone_ore": 9,
+    "minecraft:deepslate_redstone_ore": 9,
+    "minecraft:lit_deepslate_redstone_ore": 9,
+    "minecraft:redstone_lamp": 15,
+    "minecraft:lit_redstone_lamp": 15,
+    "minecraft:end_rod": 14,
+    "minecraft:ender_chest": 7,
+    "minecraft:crying_obsidian": 10,
+    "minecraft:respawn_anchor": 15,
     "minecraft:beacon": 15,
     "minecraft:conduit": 15,
-    "minecraft:respawn_anchor": 15,
-    "minecraft:crying_obsidian": 10,
-    "minecraft:magma": 3,
-    "minecraft:magma_block": 3,
-    "minecraft:ender_chest": 7,
-    "minecraft:enchanting_table": 7,
-    "minecraft:end_rod": 14,
-    "minecraft:end_crystal": 14,
-    "minecraft:dragon_egg": 1,
-    "minecraft:brewing_stand": 1,
-    "minecraft:sculk_catalyst": 6,
-    "minecraft:sculk_sensor": 1,
-    "minecraft:calibrated_sculk_sensor": 1,
-    "minecraft:torchflower": 4,
 
-    // Hot, Glowing Items & Ingredients
+    // Sea & Water Glowing Items
+    "minecraft:sea_pickle": 6,
+
+    // Buckets & Liquids
     "minecraft:lava_bucket": 15,
-    "minecraft:fire_charge": 10,
-    "minecraft:blaze_rod": 6,
-    "minecraft:blaze_powder": 4,
+
+    // Luminous Mob Drops & Materials
     "minecraft:glowstone_dust": 8,
     "minecraft:glow_ink_sac": 8,
-    "minecraft:glow_frame": 8,
-    "minecraft:glow_item_frame": 8,
-    "minecraft:nether_star": 12,
+    "minecraft:blaze_rod": 6,
+    "minecraft:blaze_powder": 6,
+    "minecraft:magma_cream": 6,
+    "minecraft:magma": 3,
+    "minecraft:dragon_breath": 5,
+    "minecraft:nether_star": 10,
+    "minecraft:fire_charge": 10,
+
+    // Ores & Rare Blocks
+    "minecraft:raw_gold": 2,
+    "minecraft:raw_iron": 1,
+    "minecraft:raw_copper": 1,
+    "minecraft:torchflower": 4,
+
+    // Enchanted & Magic Items
     "minecraft:totem_of_undying": 10,
 };
 
@@ -123,10 +123,133 @@ export const OFFHAND_LIGHT_ITEMS: Set<string> = new Set([
 ]);
 
 /**
+ * Interactive blocks where right-clicking opens a UI or performs a block action
+ * (unless player is sneaking, which bypasses block interaction in Minecraft).
+ */
+const INTERACTIVE_BLOCKS = new Set([
+    "minecraft:chest",
+    "minecraft:trapped_chest",
+    "minecraft:barrel",
+    "minecraft:crafting_table",
+    "minecraft:furnace",
+    "minecraft:blast_furnace",
+    "minecraft:smoker",
+    "minecraft:brewing_stand",
+    "minecraft:enchanting_table",
+    "minecraft:anvil",
+    "minecraft:chipped_anvil",
+    "minecraft:damaged_anvil",
+    "minecraft:hopper",
+    "minecraft:dispenser",
+    "minecraft:dropper",
+    "minecraft:lever",
+    "minecraft:stone_button",
+    "minecraft:beacon",
+    "minecraft:ender_chest",
+    "minecraft:bell",
+    "minecraft:respawn_anchor",
+    "minecraft:cartography_table",
+    "minecraft:fletching_table",
+    "minecraft:grindstone",
+    "minecraft:smithing_table",
+    "minecraft:stonecutter",
+    "minecraft:loom",
+    "minecraft:lectern",
+    "minecraft:crafter",
+]);
+
+/**
  * Checks whether an item type ID is an offhand-eligible torch or lantern.
  */
 export function isTorchOrLantern(typeId: string): boolean {
     return OFFHAND_LIGHT_ITEMS.has(typeId);
+}
+
+/**
+ * Checks whether a block type is interactive (opening a container or UI).
+ */
+function isInteractiveBlock(typeId: string): boolean {
+    if (INTERACTIVE_BLOCKS.has(typeId)) return true;
+    if (
+        typeId.includes("door") ||
+        typeId.includes("trapdoor") ||
+        typeId.includes("fence_gate") ||
+        typeId.includes("shulker_box") ||
+        typeId.includes("button")
+    ) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Checks whether a held mainhand item is a tool/weapon that does not place a block.
+ * When holding these items, right-clicking a block should place the torch from offhand.
+ */
+function isNonPlacingToolOrWeapon(typeId: string, clickedBlockTypeId: string, isSneaking: boolean): boolean {
+    if (
+        typeId.endsWith("_pickaxe") ||
+        typeId.endsWith("_sword")
+    ) {
+        return true;
+    }
+
+    // Axes: Right-clicking unstripped logs/wood strips them unless sneaking
+    if (typeId.endsWith("_axe")) {
+        const isLog =
+            clickedBlockTypeId.includes("log") ||
+            clickedBlockTypeId.includes("wood") ||
+            clickedBlockTypeId.includes("stem") ||
+            clickedBlockTypeId.includes("hyphae");
+        if (isLog && !clickedBlockTypeId.includes("stripped_") && !isSneaking) {
+            return false; // Stripping log takes priority when standing
+        }
+        return true;
+    }
+
+    // Shovels: Right-clicking grass block creates a dirt path unless sneaking
+    if (typeId.endsWith("_shovel")) {
+        if ((clickedBlockTypeId === "minecraft:grass_block" || clickedBlockTypeId === "minecraft:dirt") && !isSneaking) {
+            return false; // Creating path takes priority when standing
+        }
+        return true;
+    }
+
+    // Hoes: Right-clicking dirt/grass tills farmland unless sneaking
+    if (typeId.endsWith("_hoe")) {
+        if ((clickedBlockTypeId === "minecraft:grass_block" || clickedBlockTypeId === "minecraft:dirt") && !isSneaking) {
+            return false; // Tilling takes priority when standing
+        }
+        return true;
+    }
+
+    const nonPlacingItems = new Set([
+        "minecraft:bow",
+        "minecraft:crossbow",
+        "minecraft:trident",
+        "minecraft:mace",
+        "minecraft:fishing_rod",
+        "minecraft:spyglass",
+        "minecraft:compass",
+        "minecraft:recovery_compass",
+        "minecraft:clock",
+        "minecraft:map",
+        "minecraft:filled_map",
+        "minecraft:empty_map",
+        "minecraft:shears",
+        "minecraft:stick",
+        "minecraft:bone",
+        "minecraft:arrow",
+        "minecraft:feather",
+        "minecraft:string",
+        "minecraft:leather",
+        "minecraft:book",
+        "minecraft:enchanted_book",
+        "minecraft:totem_of_undying",
+        "minecraft:nautilus_shell",
+    ]);
+
+    return nonPlacingItems.has(typeId);
 }
 
 /**
@@ -202,8 +325,9 @@ export function equipToOffhand(player: Player, notify = true): boolean {
             const equipped = mainIsLight ? mainItem : offItem;
             if (equipped) {
                 const name = formatItemName(equipped.typeId);
+                const countBadge = equipped.amount > 1 ? ` (${equipped.amount}×)` : "";
                 const action = mainIsLight ? "Equipped to Offhand (Shield Slot)" : "Swapped to Main Hand";
-                showPlayerNotification(player, `§6✦ ${name} ${action}! ✦§r`);
+                showPlayerNotification(player, `§6✦ ${name}${countBadge} ${action}! ✦§r`);
             }
         }
 
@@ -211,6 +335,40 @@ export function equipToOffhand(player: Player, notify = true): boolean {
     } catch {
         return false;
     }
+}
+
+/**
+ * Automatically refills the offhand slot with more torches/lanterns from backpack inventory
+ * when the offhand stack is fully depleted.
+ */
+function tryRefillOffhandLight(player: Player, equippable: EntityEquippableComponent): boolean {
+    if (!DynamicLightingConfig.autoRefillOffhand) return false;
+
+    const container = getPlayerContainer(player);
+    if (!container) return false;
+
+    for (let i = 0; i < container.size; i++) {
+        const slotItem = container.getItem(i);
+        if (slotItem && isTorchOrLantern(slotItem.typeId)) {
+            container.setItem(i, undefined);
+            equippable.setEquipment(EquipmentSlot.Offhand, slotItem);
+
+            if (DynamicLightingConfig.playOffhandSound) {
+                try {
+                    player.dimension.playSound("armor.equip_generic", player.location, { volume: 0.8, pitch: 1.1 });
+                } catch {}
+            }
+
+            if (DynamicLightingConfig.showEquipNotification) {
+                const name = formatItemName(slotItem.typeId);
+                const countBadge = slotItem.amount > 1 ? ` (${slotItem.amount}×)` : "";
+                showPlayerNotification(player, `§6✦ Refilled Offhand with ${name}${countBadge}! ✦§r`);
+            }
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -270,7 +428,8 @@ export function equipToOffhandFromAnywhere(player: Player): boolean {
                         } catch {}
                     }
                     const name = formatItemName(slotItem.typeId);
-                    showPlayerNotification(player, `§6✦ ${name} Equipped to Offhand from Backpack! ✦§r`);
+                    const countBadge = slotItem.amount > 1 ? ` (${slotItem.amount}×)` : "";
+                    showPlayerNotification(player, `§6✦ ${name}${countBadge} Equipped to Offhand from Backpack! ✦§r`);
                     return true;
                 }
             }
@@ -283,6 +442,155 @@ export function equipToOffhandFromAnywhere(player: Player): boolean {
     }
 }
 
+/**
+ * Checks if a target block position is replaceable by a torch or lantern.
+ */
+function isBlockReplaceableForTorch(targetBlock: Block, isUnderwaterTorch: boolean): boolean {
+    if (targetBlock.isAir) return true;
+    const typeId = targetBlock.typeId;
+    if (typeId.startsWith("minecraft:light_block_")) return true;
+    if (
+        typeId === "minecraft:tallgrass" ||
+        typeId === "minecraft:short_grass" ||
+        typeId === "minecraft:grass" ||
+        typeId === "minecraft:fern" ||
+        typeId === "minecraft:large_fern" ||
+        typeId === "minecraft:deadbush" ||
+        typeId === "minecraft:seagrass" ||
+        typeId === "minecraft:structure_void"
+    ) {
+        return true;
+    }
+    if (isUnderwaterTorch && targetBlock.isLiquid && typeId === "minecraft:water") {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Attempts to place a torch or lantern from the offhand slot onto a target block face.
+ * Decrements the offhand stack by 1 in survival/adventure mode without truncating or losing stacks.
+ */
+function tryPlaceOffhandTorch(
+    player: Player,
+    equippable: EntityEquippableComponent,
+    offItem: ItemStack,
+    clickedBlock: Block,
+    blockFace: Direction
+): boolean {
+    if (clickedBlock.isAir || clickedBlock.isLiquid) return false;
+
+    // Determine target placement block position based on face clicked
+    let targetBlock: Block | undefined;
+    switch (blockFace) {
+        case Direction.Up:
+            targetBlock = clickedBlock.above();
+            break;
+        case Direction.Down:
+            targetBlock = clickedBlock.below();
+            break;
+        case Direction.North:
+            targetBlock = clickedBlock.north();
+            break;
+        case Direction.South:
+            targetBlock = clickedBlock.south();
+            break;
+        case Direction.East:
+            targetBlock = clickedBlock.east();
+            break;
+        case Direction.West:
+            targetBlock = clickedBlock.west();
+            break;
+    }
+
+    if (!targetBlock || !targetBlock.isValid) return false;
+
+    const isUnderwaterTorch = offItem.typeId === "minecraft:underwater_torch";
+    if (!isBlockReplaceableForTorch(targetBlock, isUnderwaterTorch)) {
+        return false;
+    }
+
+    // Resolve correct block permutation and attachment
+    let perm: BlockPermutation | undefined;
+    const itemType = offItem.typeId;
+
+    if (itemType.includes("lantern")) {
+        const lanternId = itemType === "minecraft:soul_lantern" ? "minecraft:soul_lantern" : "minecraft:lantern";
+        if (blockFace === Direction.Down) {
+            perm = BlockPermutation.resolve(lanternId, { hanging: true });
+        } else {
+            perm = BlockPermutation.resolve(lanternId, { hanging: false });
+        }
+    } else {
+        // Torches
+        let torchId = "minecraft:torch";
+        if (itemType === "minecraft:soul_torch") torchId = "minecraft:soul_torch";
+        else if (itemType === "minecraft:redstone_torch") torchId = "minecraft:redstone_torch";
+        else if (itemType === "minecraft:underwater_torch") torchId = "minecraft:underwater_torch";
+        else if (itemType.startsWith("minecraft:colored_torch_")) torchId = itemType;
+
+        if (blockFace === Direction.Up) {
+            perm = BlockPermutation.resolve(torchId, { torch_facing_direction: "top" });
+        } else if (blockFace === Direction.North) {
+            perm = BlockPermutation.resolve(torchId, { torch_facing_direction: "south" });
+        } else if (blockFace === Direction.South) {
+            perm = BlockPermutation.resolve(torchId, { torch_facing_direction: "north" });
+        } else if (blockFace === Direction.West) {
+            perm = BlockPermutation.resolve(torchId, { torch_facing_direction: "east" });
+        } else if (blockFace === Direction.East) {
+            perm = BlockPermutation.resolve(torchId, { torch_facing_direction: "west" });
+        } else {
+            // Torches cannot be placed on ceilings
+            return false;
+        }
+    }
+
+    if (!perm) return false;
+
+    // Place the block
+    try {
+        targetBlock.setPermutation(perm);
+    } catch {
+        return false;
+    }
+
+    // Play placement sound
+    try {
+        player.dimension.playSound("dig.wood", targetBlock.location, { volume: 0.8, pitch: 0.9 });
+    } catch {
+        // Sound safety
+    }
+
+    // Decrement offhand item stack safely in survival/adventure mode
+    if (player.getGameMode() !== GameMode.Creative) {
+        try {
+            if (offItem.amount > 1) {
+                offItem.amount -= 1;
+                equippable.setEquipment(EquipmentSlot.Offhand, offItem);
+            } else {
+                const refilled = tryRefillOffhandLight(player, equippable);
+                if (!refilled) {
+                    equippable.setEquipment(EquipmentSlot.Offhand, undefined);
+                    if (DynamicLightingConfig.showEquipNotification) {
+                        showPlayerNotification(player, "§7✦ Out of torches in offhand! ✦§r");
+                    }
+                }
+            }
+        } catch {
+            // Inventory safety
+        }
+    }
+
+    // Immediately refresh dynamic light position for the player
+    try {
+        updatePlayerLight(player);
+    } catch {
+        // Light safety
+    }
+
+    return true;
+}
+
 interface PlayerLightState {
     dimId: string;
     pos: Vector3;
@@ -290,46 +598,50 @@ interface PlayerLightState {
 }
 
 const playerLightMap = new Map<string, PlayerLightState>();
+const playerLastInteractBlockTick = new Map<string, number>();
+const playerWasJumping = new Map<string, boolean>();
+const playerJumpCooldown = new Map<string, number>();
 
 /**
- * Returns the light level emitted by a held item (0 if non-luminous).
+ * Returns the highest light level emitted by an item stack (0 if non-luminous).
  */
-function getItemLightLevel(item?: ItemStack): number {
-    if (!item) return 0;
-    return HELD_LIGHT_SOURCES[item.typeId] ?? 0;
+function getItemLightLevel(itemStack: ItemStack | undefined): number {
+    if (!itemStack) return 0;
+    return HELD_LIGHT_SOURCES[itemStack.typeId] ?? 0;
 }
 
 /**
- * Clears the active dynamic light block for a player.
+ * Removes any dynamic light block spawned by a player.
  */
 function clearPlayerLight(playerId: string): void {
     const state = playerLightMap.get(playerId);
     if (!state) return;
 
-    playerLightMap.delete(playerId);
-
     try {
         const dim = world.getDimension(state.dimId);
-        if (!dim) return;
-
         const block = dim.getBlock(state.pos);
         if (block && block.typeId.startsWith("minecraft:light_block_")) {
             block.setPermutation(BlockPermutation.resolve("minecraft:air"));
         }
     } catch {
-        // Unloaded chunk safety
+        // Dimension / unloaded chunk safety
     }
+
+    playerLightMap.delete(playerId);
 }
 
 /**
- * Updates dynamic lighting for a single player.
- * Only modifies blocks when the player actually crosses into a new block coordinate
- * or switches to a different light source to prevent chunk rebuild stutter and light flickering.
+ * Updates dynamic lighting around a player based on held light sources.
  */
 function updatePlayerLight(player: Player): void {
-    if (!player.isValid) return;
+    if (!player || !player.isValid) return;
 
-    // Check mainhand and offhand items
+    // Spectator and dead players emit no light
+    if (player.getGameMode() === GameMode.Spectator) {
+        clearPlayerLight(player.id);
+        return;
+    }
+
     let mainhandLight = 0;
     let offhandLight = 0;
 
@@ -344,37 +656,44 @@ function updatePlayerLight(player: Player): void {
             }
         }
     } catch {
-        // Equipment component safety
+        // Equipment query safety
     }
 
     const currentLight = Math.max(mainhandLight, offhandLight);
 
-    if (currentLight <= 0) {
+    if (currentLight === 0) {
         clearPlayerLight(player.id);
         return;
     }
 
-    const loc = player.location;
-    let targetPos: Vector3 = {
-        x: Math.floor(loc.x),
-        y: Math.floor(loc.y + 1), // Torso height (natural ambient light source)
-        z: Math.floor(loc.z),
+    // Determine target location: eye position first, feet fallback
+    const headLoc = player.getHeadLocation();
+    const headPos: Vector3 = {
+        x: Math.floor(headLoc.x),
+        y: Math.floor(headLoc.y),
+        z: Math.floor(headLoc.z),
     };
 
-    let block: ReturnType<typeof player.dimension.getBlock> = undefined;
+    let targetPos = headPos;
+    let block: Block | undefined;
+
     try {
-        block = player.dimension.getBlock(targetPos);
+        const headBlock = player.dimension.getBlock(headPos);
+        if (headBlock && (headBlock.isAir || headBlock.typeId.startsWith("minecraft:light_block_"))) {
+            block = headBlock;
+        }
     } catch {
         // Dimension query safety
     }
 
-    // If torso position is blocked by ceiling or solid block, fall back to feet position
-    if (!block || (!block.isAir && !block.typeId.startsWith("minecraft:light_block_"))) {
+    if (!block) {
+        const feetLoc = player.location;
         const feetPos: Vector3 = {
-            x: Math.floor(loc.x),
-            y: Math.floor(loc.y),
-            z: Math.floor(loc.z),
+            x: Math.floor(feetLoc.x),
+            y: Math.floor(feetLoc.y),
+            z: Math.floor(feetLoc.z),
         };
+
         try {
             const feetBlock = player.dimension.getBlock(feetPos);
             if (feetBlock && (feetBlock.isAir || feetBlock.typeId.startsWith("minecraft:light_block_"))) {
@@ -420,7 +739,35 @@ function updatePlayerLight(player: Player): void {
 }
 
 /**
- * Initializes the lightweight Dynamic Lighting and Offhand Torch/Lantern features.
+ * Checks if a player performed a Crouch + Jump gesture to quick-swap torches into offhand.
+ */
+function checkCrouchJumpEquip(player: Player, currentTick: number): void {
+    if (!DynamicLightingConfig.allowCrouchJumpEquip) return;
+    if (!player || !player.isValid) return;
+
+    const isJumping = player.isJumping;
+    const wasJumping = playerWasJumping.get(player.id) ?? false;
+    playerWasJumping.set(player.id, isJumping);
+
+    if (isJumping && !wasJumping && player.isSneaking) {
+        const lastTick = playerJumpCooldown.get(player.id) ?? 0;
+        if (currentTick - lastTick < 10) return; // 0.5s cooldown
+        playerJumpCooldown.set(player.id, currentTick);
+
+        const equippable = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
+        if (!equippable) return;
+
+        const mainItem = equippable.getEquipment(EquipmentSlot.Mainhand);
+        const offItem = equippable.getEquipment(EquipmentSlot.Offhand);
+
+        if ((mainItem && isTorchOrLantern(mainItem.typeId)) || (offItem && isTorchOrLantern(offItem.typeId))) {
+            equipToOffhand(player, DynamicLightingConfig.showEquipNotification);
+        }
+    }
+}
+
+/**
+ * Initializes the lightweight Dynamic Lighting, Offhand Torch/Lantern, and Placement features.
  */
 export function initDynamicLightingFeature(): void {
     if (!DynamicLightingConfig.enabled) {
@@ -428,14 +775,16 @@ export function initDynamicLightingFeature(): void {
         return;
     }
 
-    // Periodic light update loop
+    // Periodic light update and jump detection loop
     const intervalTicks = DynamicLightingConfig.updateIntervalTicks ?? 4;
 
     system.runInterval(() => {
         try {
             const players = world.getAllPlayers();
+            const currentTick = system.currentTick;
             for (const player of players) {
                 updatePlayerLight(player);
+                checkCrouchJumpEquip(player, currentTick);
             }
         } catch {
             // Player query safety
@@ -445,6 +794,9 @@ export function initDynamicLightingFeature(): void {
     // Clean up light blocks on player leave, dimension change, death, or respawn
     world.afterEvents.playerLeave.subscribe((event) => {
         clearPlayerLight(event.playerId);
+        playerLastInteractBlockTick.delete(event.playerId);
+        playerWasJumping.delete(event.playerId);
+        playerJumpCooldown.delete(event.playerId);
     });
 
     world.afterEvents.playerDimensionChange.subscribe((event) => {
@@ -461,12 +813,62 @@ export function initDynamicLightingFeature(): void {
         clearPlayerLight(event.player.id);
     });
 
-    // Right-click item use (Bedrock itemUse event)
+    // 1. Offhand Torch Placement (Java Edition parity)
+    world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
+        const player = event.player;
+        if (!player || !player.isValid) return;
+
+        // Record interaction tick to prevent itemUse from misinterpreting block placement as air clicks
+        playerLastInteractBlockTick.set(player.id, system.currentTick);
+
+        if (!DynamicLightingConfig.allowOffhandPlacement) return;
+
+        const equippable = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
+        if (!equippable) return;
+
+        const offItem = equippable.getEquipment(EquipmentSlot.Offhand);
+        if (!offItem || !isTorchOrLantern(offItem.typeId)) return;
+
+        const mainItem = equippable.getEquipment(EquipmentSlot.Mainhand);
+
+        // If mainhand has a placeable block or item, allow mainhand placement to take precedence
+        if (mainItem && !isNonPlacingToolOrWeapon(mainItem.typeId, event.block.typeId, player.isSneaking)) {
+            return;
+        }
+
+        // If standing and clicking an interactive container, allow interacting with container
+        if (!player.isSneaking && isInteractiveBlock(event.block.typeId)) {
+            return;
+        }
+
+        // Attempt to place the offhand torch
+        const success = tryPlaceOffhandTorch(player, equippable, offItem, event.block, event.blockFace);
+        if (success) {
+            event.cancel = true; // Cancel default block interact so mainhand weapon/tool does not swing
+        }
+    });
+
+    // 2. Right-click item use in air (equipped when sneaking)
     if (DynamicLightingConfig.allowOffhandEquipOnUse) {
         world.afterEvents.itemUse.subscribe((event) => {
             try {
+                const player = event.source;
+                if (!player || !player.isValid) return;
+
+                // Check if the player clicked/placed on a block on this same tick
+                const lastBlockTick = playerLastInteractBlockTick.get(player.id);
+                if (lastBlockTick !== undefined && lastBlockTick === system.currentTick) {
+                    // Player placed or interacted with a block! Do NOT swap or equip!
+                    return;
+                }
+
+                // When requireSneakToEquip is enabled, only swap when crouching (prevents accidental swaps)
+                if (DynamicLightingConfig.requireSneakToEquip && !player.isSneaking) {
+                    return;
+                }
+
                 if (isTorchOrLantern(event.itemStack.typeId)) {
-                    equipToOffhand(event.source, DynamicLightingConfig.showEquipNotification);
+                    equipToOffhand(player, DynamicLightingConfig.showEquipNotification);
                 }
             } catch {
                 // Ignore
@@ -474,5 +876,15 @@ export function initDynamicLightingFeature(): void {
         });
     }
 
-    console.warn("[DynamicLight] Feature initialized successfully.");
+    // 3. ScriptEvent listener for quick torch offhand toggling (/scriptevent qol:torch or /scriptevent qol:offhand)
+    system.afterEvents.scriptEventReceive.subscribe((event) => {
+        if (event.id === "qol:offhand" || event.id === "qol:torch" || event.id === "qol:light") {
+            const player = event.sourceEntity as Player | undefined;
+            if (player && player.isValid && player.typeId === "minecraft:player") {
+                equipToOffhandFromAnywhere(player);
+            }
+        }
+    });
+
+    console.warn("[DynamicLight] Feature initialized successfully with offhand torch placement and stack safety.");
 }

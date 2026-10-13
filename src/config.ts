@@ -420,6 +420,33 @@ export const DynamicLightingConfig = {
     allowOffhandEquipOnUse: true,
 
     /**
+     * Require sneaking (crouching) when right-clicking with a torch/lantern in air to equip or swap to offhand.
+     * This prevents accidental equipment swaps while placing blocks or interacting in the world.
+     * Default: true
+     */
+    requireSneakToEquip: true,
+
+    /**
+     * Quick-swap held torch/lantern into offhand by crouching and jumping (Crouch + Jump).
+     * Default: true
+     */
+    allowCrouchJumpEquip: true,
+
+    /**
+     * Allow placing torches and lanterns directly from the offhand slot by right-clicking on blocks
+     * while holding tools (pickaxes, swords, shovels, axes, hoes) or an empty main hand (Java Edition parity).
+     * Default: true
+     */
+    allowOffhandPlacement: true,
+
+    /**
+     * Automatically refill the offhand slot with more torches/lanterns from backpack inventory
+     * when the offhand stack is fully depleted.
+     * Default: true
+     */
+    autoRefillOffhand: true,
+
+    /**
      * Show an action bar notification confirming torch/lantern offhand equipment.
      * Default: true
      */
