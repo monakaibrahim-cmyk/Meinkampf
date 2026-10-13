@@ -15,6 +15,7 @@ import { initInventorySortingFeature } from "./features/inventorySorting";
 import { initCreeperMorningDespawnFeature } from "./features/creeperDespawn";
 import { initXpMagnetFeature } from "./features/xpMagnet";
 import { initEggHatchingFeature } from "./features/eggHatching";
+import { initAutoWaterBucketFeature } from "./features/autoWaterBucket";
 
 // Initialize Features
 initFarmingFeature();
@@ -31,6 +32,7 @@ initInventorySortingFeature();
 initCreeperMorningDespawnFeature();
 initXpMagnetFeature();
 initEggHatchingFeature();
+initAutoWaterBucketFeature();
 
 // Clear any residual titles / subtitles on player spawn to ensure HUD is completely clean
 world.afterEvents.playerSpawn.subscribe((event) => {

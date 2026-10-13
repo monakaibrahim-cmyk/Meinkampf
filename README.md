@@ -52,6 +52,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 * **Vein Miner**: Mining ores while sneaking harvests connected ore veins.
 * **Tree Capitator**: Fells standing trees and naturally fallen logs, featuring species-matched leaf decay and automatic sapling replanting.
 * **Durability Freezing**: Freezes tool, weapon, and armor durability wear while fully repaired.
+* **Auto Water Bucket (MLG Clutch)**: Automatically performs an MLG water bucket clutch when falling from heights that would cause damage or death. Places water right before impact to negate all fall damage, then auto-retrieves it into the bucket 3 ticks later to prevent flooding.
 * **Immortal Pets**: Tamed pets and mounts are protected against fatal damage.
 
 ---
@@ -82,6 +83,7 @@ Available configurations include:
 * `XpMagnetConfig` — Collection radius and pull physics.
 * `CampfireRegenConfig` — Regeneration rates, defensive perimeter, and damage scaling.
 * `TreeCapitatorConfig` — Max log limits, leaf decay filtering, and sapling spacing.
+* `AutoWaterBucketConfig` — Fall detection sensitivity, clutch trigger distance, and auto-retrieve timing.
 
 ---
 

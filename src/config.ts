@@ -1049,4 +1049,84 @@ export const ChickenEggHatchConfig = {
     checkIntervalTicks: 20,
 };
 
+/**
+ * Auto Water Bucket (MLG Clutch) Configuration
+ */
+export const AutoWaterBucketConfig = {
+    /**
+     * Enable automatic water bucket clutch when falling from heights.
+     * Places water right before impact to eliminate fall damage, then auto-retrieves it.
+     * Default: true
+     */
+    enabled: true,
+
+    /**
+     * Fall trigger sensitivity mode:
+     * - "damaging_falls": Triggers on any fall that would cause fall damage (> minFallDistance blocks).
+     * - "lethal_only": Triggers only if the projected fall damage would kill the player (fallDamage >= currentHealth).
+     * Default: "damaging_falls"
+     */
+    mode: "damaging_falls" as "damaging_falls" | "lethal_only",
+
+    /**
+     * Minimum distance fallen (in blocks) before considering fall damage.
+     * Vanilla Minecraft fall damage starts above 3 blocks.
+     * Default: 4.0 blocks
+     */
+    minFallDistance: 4.0,
+
+    /**
+     * Downward vertical velocity threshold (blocks/tick) to detect rapid falling.
+     * Normal jumps and walking off 1 block maintain velocity > -0.6.
+     * Default: -0.75
+     */
+    downwardVelocityThreshold: -0.75,
+
+    /**
+     * Distance to ground (in blocks) at which water is placed.
+     * Placed 1.5 - 2.5 blocks before impact for a clean clutch.
+     * Default: 2.2 blocks
+     */
+    triggerDistanceBlocks: 2.2,
+
+    /**
+     * Automatically scoop water back up into the bucket 2-4 ticks after landing.
+     * Keeps your surroundings clean and avoids accidental flooding/washing away redstone.
+     * Default: true
+     */
+    autoRetrieveWater: true,
+
+    /**
+     * Delay in ticks before retrieving the placed water block.
+     * 1-4 ticks gives enough time for the player to touch water and reset fall distance to 0.
+     * Default: 3 ticks
+     */
+    retrieveDelayTicks: 3,
+
+    /**
+     * Search entire inventory for a water bucket (true), or only hands/hotbar (false).
+     * Default: true
+     */
+    searchEntireInventory: true,
+
+    /**
+     * Cooldown in ticks per player between clutches to prevent multiple triggers during one fall.
+     * 20 ticks = 1 second.
+     * Default: 40 ticks (2 seconds)
+     */
+    cooldownTicks: 40,
+
+    /**
+     * Play splash sound and particles on clutch.
+     * Default: true
+     */
+    playEffects: true,
+
+    /**
+     * Send action bar notification to the player when a clutch is performed.
+     * Default: true
+     */
+    notifyPlayer: true,
+};
+
 
