@@ -112,7 +112,8 @@ function isAddonFile(filePath, diffRange) {
     if (
         filePath === "scripts/check-addon-changes.js" ||
         filePath === "scripts/discord-notify.js" ||
-        filePath === "scripts/release-metadata.js"
+        filePath === "scripts/release-metadata.js" ||
+        filePath === "scripts/curseforge-upload.js"
     ) {
         return false;
     }

@@ -147,6 +147,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Publish to CurseForge
+        if: success()
+        run: node scripts/curseforge-upload.js
+        env:
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.meta.outputs.title }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}
+          CHANGELOG_PATH: ${{ steps.meta.outputs.changelog }}
+
       - name: Notify Discord on release
         if: success()
         run: node scripts/discord-notify.js release

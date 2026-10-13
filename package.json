@@ -10,6 +10,7 @@
     "pack": "node scripts/pack.js",
     "pack/build": "node scripts/pack.js",
     "build:pack": "node scripts/pack.js",
+    "curseforge:upload": "node scripts/curseforge-upload.js",
     "prepare": "git config commit.template .github/.gitmessage || true",
     "setup:git": "git config commit.template .github/.gitmessage"
   },
