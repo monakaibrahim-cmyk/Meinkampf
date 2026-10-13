@@ -1,0 +1,32 @@
+{
+  "format_version": "1.10.0",
+  "animations": {
+    "animation.qol.quick_sorter.hold_first_person": {
+      "loop": true,
+      "bones": {
+        "quick_sorter": {
+          "position": [-7, -3, -2],
+          "rotation": [152, -9, 25]
+        }
+      }
+    },
+    "animation.qol.quick_sorter.hold_third_person": {
+      "loop": true,
+      "bones": {
+        "quick_sorter": {
+          "position": [1.5, -2.5, -10.5],
+          "rotation": [97, -1.5, -49]
+        }
+      }
+    },
+    "animation.qol.quick_sorter.gem_float": {
+      "loop": true,
+      "bones": {
+        "gem": {
+          "position": [0, "math.sin(q.life_time * 120.0) * 0.35", 0],
+          "rotation": [0, "q.life_time * 90.0", 0]
+        }
+      }
+    }
+  }
+}

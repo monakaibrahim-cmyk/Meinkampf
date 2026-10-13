@@ -1,0 +1,32 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:attachable": {
+    "description": {
+      "identifier": "qol:quick_sorter",
+      "materials": {
+        "default": "entity_alphatest",
+        "enchanted": "entity_alphatest_glint"
+      },
+      "textures": {
+        "default": "textures/entity/quick_sorter",
+        "enchanted": "textures/misc/enchanted_item_glint"
+      },
+      "geometry": {
+        "default": "geometry.qol.quick_sorter"
+      },
+      "animations": {
+        "hold_first_person": "animation.qol.quick_sorter.hold_first_person",
+        "hold_third_person": "animation.qol.quick_sorter.hold_third_person",
+        "gem_float": "animation.qol.quick_sorter.gem_float"
+      },
+      "scripts": {
+        "animate": [
+          { "hold_first_person": "c.is_first_person == 1.0" },
+          { "hold_third_person": "c.is_first_person == 0.0" },
+          "gem_float"
+        ]
+      },
+      "render_controllers": ["controller.render.item_default"]
+    }
+  }
+}
