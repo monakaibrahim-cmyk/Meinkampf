@@ -1303,6 +1303,41 @@ export const AfkProtectionConfig = {
      */
     announceToChat: false,
 
+    /**
+     * KICK AFK PLAYERS ON REALM OR DEDICATED SERVER
+     * Automatically kicks players who remain AFK past the kick timeout to free up server slots.
+     * In local play (singleplayer), players are NEVER kicked.
+     * Default: false
+     */
+    kickOnServerOrRealm: false,
+
+    /**
+     * Environment detection mode for AFK kicking:
+     * - "auto": Automatically detects environment (never kicks in local singleplayer play, kicks on servers/realms).
+     * - "server": Explicitly treated as a Realm or Dedicated Server environment (kicks eligible AFK players).
+     * - "local": Explicitly treated as local play (kicking is completely disabled).
+     * Default: "auto"
+     */
+    environment: "auto" as "auto" | "server" | "local",
+
+    /**
+     * Inactivity duration in seconds before kicking an AFK player on a Realm or Dedicated Server.
+     * Default: 600 seconds (10 minutes)
+     */
+    afkKickTimeoutSeconds: 600,
+
+    /**
+     * Countdown warning duration in seconds before kicking an AFK player.
+     * Displays a prominent warning on the action bar so the player can move to stay connected.
+     * Default: 30 seconds
+     */
+    kickWarningSeconds: 30,
+
+    /**
+     * Custom disconnect reason message displayed when kicked for being AFK.
+     * Default: "Kicked for being AFK for too long."
+     */
+    kickReason: "Kicked for being AFK for too long.",
 
     /**
      * Check interval in ticks for the AFK monitor loop (20 ticks = 1 second).

@@ -73,6 +73,43 @@ export function isPlayerAfk(player: Player): boolean {
 }
 
 /**
+ * Determines whether the current session is running in a local singleplayer environment.
+ * - If `AfkProtectionConfig.environment` is "local", strictly returns true (no kicks).
+ * - If `AfkProtectionConfig.environment` is "server", strictly returns false (kicks allowed if enabled).
+ * - If `AfkProtectionConfig.environment` is "auto", checks player count. In singleplayer offline worlds,
+ *   world.getAllPlayers().length <= 1, which is treated as local play to prevent kicking the local player/host.
+ */
+export function isLocalPlay(): boolean {
+    if (AfkProtectionConfig.environment === "local") {
+        return true;
+    }
+    if (AfkProtectionConfig.environment === "server") {
+        return false;
+    }
+    const players = Array.from(world.getAllPlayers());
+    return players.length <= 1;
+}
+
+/**
+ * Safely kicks an AFK player from a server or realm.
+ * Deactivates AFK protection first, then executes the /kick command.
+ */
+export function kickAfkPlayer(player: Player, reason?: string): boolean {
+    if (!player || !player.isValid) return false;
+    const kickReason = reason || AfkProtectionConfig.kickReason || "Kicked for being AFK for too long.";
+    try {
+        const playerName = player.name;
+        deactivateAfk(player);
+        const safeReason = kickReason.replace(/["\\]/g, "");
+        player.dimension.runCommand(`kick "${playerName}" ${safeReason}`);
+        return true;
+    } catch (err) {
+        console.warn(`[AfkProtection] Unable to kick player ${player.name}:`, err);
+        return false;
+    }
+}
+
+/**
  * Activates AFK mode and protection for a player.
  */
 export function activateAfk(player: Player, manual = false): boolean {
@@ -243,6 +280,26 @@ export function processAfkMonitoring(): void {
 
             // If player is in AFK mode
             if (state.isAfk) {
+                // Check server/realm kick timeout
+                const shouldKickOnServer =
+                    AfkProtectionConfig.kickOnServerOrRealm &&
+                    !isLocalPlay() &&
+                    AfkProtectionConfig.afkKickTimeoutSeconds > 0;
+
+                const inactiveMs = now - state.lastActivityTime;
+                const kickTimeoutMs = AfkProtectionConfig.afkKickTimeoutSeconds * 1000;
+                const kickWarningMs = (AfkProtectionConfig.kickWarningSeconds ?? 30) * 1000;
+
+                if (shouldKickOnServer && inactiveMs >= kickTimeoutMs) {
+                    kickAfkPlayer(player, AfkProtectionConfig.kickReason);
+                    continue;
+                }
+
+                const isWarningPeriod =
+                    shouldKickOnServer &&
+                    kickWarningMs > 0 &&
+                    inactiveMs >= kickTimeoutMs - kickWarningMs;
+
                 const isInvincible = maxInvincibleMs <= 0 || now - state.afkStartTime <= maxInvincibleMs;
 
                 if (isInvincible) {
@@ -276,16 +333,25 @@ export function processAfkMonitoring(): void {
 
                     // Display status in action bar
                     if (AfkProtectionConfig.showActionBar) {
-                        let remainingStr = "";
-                        if (maxInvincibleMs > 0) {
-                            const remSec = Math.max(0, Math.ceil((maxInvincibleMs - (now - state.afkStartTime)) / 1000));
-                            remainingStr = ` §7(${remSec}s remaining)`;
+                        if (isWarningPeriod) {
+                            const remKickSec = Math.max(1, Math.ceil((kickTimeoutMs - inactiveMs) / 1000));
+                            try {
+                                player.onScreenDisplay.setActionBar(
+                                    `§c⚠️ AFK WARNING: Disconnecting in ${remKickSec}s! Move to stay connected.`
+                                );
+                            } catch {}
+                        } else {
+                            let remainingStr = "";
+                            if (maxInvincibleMs > 0) {
+                                const remSec = Math.max(0, Math.ceil((maxInvincibleMs - (now - state.afkStartTime)) / 1000));
+                                remainingStr = ` §7(${remSec}s remaining)`;
+                            }
+                            try {
+                                player.onScreenDisplay.setActionBar(
+                                    `§6✦ AFK Protection Active ✦ §aInvincible & Ignored${remainingStr}`
+                                );
+                            } catch {}
                         }
-                        try {
-                            player.onScreenDisplay.setActionBar(
-                                `§6✦ AFK Protection Active ✦ §aInvincible & Ignored${remainingStr}`
-                            );
-                        } catch {}
                     }
 
                     // Spawn protective particles
@@ -349,11 +415,20 @@ export function processAfkMonitoring(): void {
                 } else {
                     // Invincibility duration expired while player is still AFK
                     if (AfkProtectionConfig.showActionBar) {
-                        try {
-                            player.onScreenDisplay.setActionBar(
-                                "§c✦ AFK Invincibility Expired ✦ §e(Move to resume normal play)"
-                            );
-                        } catch {}
+                        if (isWarningPeriod) {
+                            const remKickSec = Math.max(1, Math.ceil((kickTimeoutMs - inactiveMs) / 1000));
+                            try {
+                                player.onScreenDisplay.setActionBar(
+                                    `§c⚠️ AFK WARNING: Disconnecting in ${remKickSec}s! Move to stay connected.`
+                                );
+                            } catch {}
+                        } else {
+                            try {
+                                player.onScreenDisplay.setActionBar(
+                                    "§c✦ AFK Invincibility Expired ✦ §e(Move to resume normal play)"
+                                );
+                            } catch {}
+                        }
                     }
                 }
             } else {
