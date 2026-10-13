@@ -28,9 +28,10 @@ function checkAddonChanges() {
     if (
         commitMsg.includes("[skip build]") ||
         commitMsg.includes("[skip release]") ||
-        commitMsg.includes("[no release]")
+        commitMsg.includes("[no release]") ||
+        commitMsg.includes("[skip ci]")
     ) {
-        console.log(`[Smart Filter] Commit message contains skip flag ("${commitMsg}"). Skipping build & release.`);
+        console.log(`[Smart Filter] Commit message contains skip flag. Skipping build & release.`);
         setOutput("has_addon_changes", "false");
         return false;
     }
@@ -38,11 +39,13 @@ function checkAddonChanges() {
     // 3. Inspect changed files in the commit or push range
     let changedFiles = [];
     const beforeSha = process.env.BEFORE_SHA || "";
+    let diffRange = "HEAD~1 HEAD";
 
     if (beforeSha && !/^0+$/.test(beforeSha)) {
         try {
             const diffOutput = execSync(`git diff --name-only ${beforeSha} HEAD`, { encoding: "utf8" });
             changedFiles = diffOutput.split("\n").map((f) => f.trim()).filter(Boolean);
+            diffRange = `${beforeSha} HEAD`;
         } catch {
             // Fallback if beforeSha is not available
         }
@@ -52,45 +55,93 @@ function checkAddonChanges() {
         try {
             const diffOutput = execSync("git diff --name-only HEAD~1 HEAD", { encoding: "utf8" });
             changedFiles = diffOutput.split("\n").map((f) => f.trim()).filter(Boolean);
+            diffRange = "HEAD~1 HEAD";
         } catch {
             try {
                 const showOutput = execSync('git show --pretty="" --name-only HEAD', { encoding: "utf8" });
                 changedFiles = showOutput.split("\n").map((f) => f.trim()).filter(Boolean);
+                diffRange = "HEAD";
             } catch {
-                console.warn("[Smart Filter] Unable to read git diff; defaulting to true for safety.");
-                setOutput("has_addon_changes", "true");
-                return true;
+                console.warn("[Smart Filter] Unable to read git diff; defaulting to false to avoid unwanted releases.");
+                setOutput("has_addon_changes", "false");
+                return false;
             }
         }
     }
 
-    console.log(`[Smart Filter] Changed files in commit (${changedFiles.length}):`);
+    console.log(`[Smart Filter] Changed files in commit range (${changedFiles.length}):`);
     changedFiles.forEach((f) => console.log(`   - ${f}`));
 
-    // Directories and files that directly constitute addon code, resources, or builds
-    const addonPatterns = [
-        /^src\//,
-        /^behavior_pack\//,
-        /^resource_pack\//,
-        /^package\.json$/,
-        /^package-lock\.json$/,
-        /^tsconfig\.json$/,
-        /^scripts\/pack\.js$/,
-    ];
+    // Determine which files actually modify addon gameplay code, resources, or dependencies
+    const addonChangedFiles = changedFiles.filter((file) => isAddonFile(file, diffRange));
 
-    const hasAddonChanges = changedFiles.some((file) =>
-        addonPatterns.some((pattern) => pattern.test(file))
-    );
+    console.log(`[Smart Filter] Addon-affecting files (${addonChangedFiles.length}):`);
+    addonChangedFiles.forEach((f) => console.log(`   * ${f}`));
 
-    if (hasAddonChanges) {
+    if (addonChangedFiles.length > 0) {
         console.log("[Smart Filter] Result: Addon updates or fixes detected. Proceeding with build & release.");
         setOutput("has_addon_changes", "true");
         return true;
     } else {
-        console.log("[Smart Filter] Result: Commit does NOT affect addon files (docs, configs, etc.). Skipping build & release.");
+        console.log("[Smart Filter] Result: No addon gameplay, behavior, or resource files were changed (only docs, templates, CI, etc.). Skipping build & release.");
         setOutput("has_addon_changes", "false");
         return false;
     }
+}
+
+/**
+ * Determines if a modified file affects the actual Minecraft Bedrock addon.
+ */
+function isAddonFile(filePath, diffRange) {
+    // 1. Files that are strictly documentation, templates, git configurations, or tooling
+    if (
+        filePath.endsWith(".md") ||
+        filePath.startsWith(".github/") ||
+        filePath.startsWith("update/") ||
+        filePath.startsWith("docs/") ||
+        filePath === ".gitignore" ||
+        filePath === ".gitmessage" ||
+        filePath === ".gitattributes" ||
+        filePath === "LICENSE" ||
+        filePath.startsWith("LICENSE")
+    ) {
+        return false;
+    }
+
+    // 2. CI/CD notification and metadata scripts do not change the addon itself
+    if (
+        filePath === "scripts/check-addon-changes.js" ||
+        filePath === "scripts/discord-notify.js" ||
+        filePath === "scripts/release-metadata.js"
+    ) {
+        return false;
+    }
+
+    // 3. Direct addon source code, behavior pack, and resource pack assets
+    if (
+        filePath.startsWith("src/") ||
+        filePath.startsWith("behavior_pack/") ||
+        filePath.startsWith("resource_pack/")
+    ) {
+        return true;
+    }
+
+    // 4. Packaging logic script
+    if (filePath === "scripts/pack.js") {
+        return true;
+    }
+
+    // 5. package.json: only consider an addon change if dependencies changed (e.g. @minecraft/server)
+    if (filePath === "package.json") {
+        try {
+            const diff = execSync(`git diff ${diffRange} -- package.json`, { encoding: "utf8" });
+            return /"dependencies"|"@minecraft\//.test(diff);
+        } catch {
+            return false;
+        }
+    }
+
+    return false;
 }
 
 function setOutput(key, value) {

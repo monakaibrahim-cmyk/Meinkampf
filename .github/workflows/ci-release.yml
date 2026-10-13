@@ -11,7 +11,12 @@ on:
       - '**.md'
       - 'update/**'
       - '.gitignore'
+      - '.gitmessage'
+      - '.github/.gitmessage'
+      - '.github/pull_request_template.md'
+      - '.github/ISSUE_TEMPLATE/**'
       - 'LICENSE'
+      - 'docs/**'
   pull_request:
     branches:
       - main
@@ -20,7 +25,12 @@ on:
       - '**.md'
       - 'update/**'
       - '.gitignore'
+      - '.gitmessage'
+      - '.github/.gitmessage'
+      - '.github/pull_request_template.md'
+      - '.github/ISSUE_TEMPLATE/**'
       - 'LICENSE'
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
@@ -67,6 +77,7 @@ jobs:
         run: npm run typecheck
 
       - name: Build bundle
+        if: steps.filter.outputs.has_addon_changes == 'true'
         run: npm run build
 
       - name: Test package build
