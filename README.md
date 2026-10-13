@@ -58,7 +58,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 * **Durability Freezing**: Freezes tool, weapon, and armor durability wear while fully repaired.
 * **Auto Water Bucket (MLG Clutch)**: Automatically performs an MLG water bucket clutch when falling from heights that would cause damage or death. Places water right before impact to negate all fall damage, then auto-retrieves it into the bucket 3 ticks later to prevent flooding.
 * **Immortal Pets**: Tamed pets and mounts are protected against fatal damage.
-* **AFK Protection (Experimental)**: Automatically detects when a player goes idle (no movement or camera rotation for 60s). Grants temporary invincibility against all damage causes (mobs, fire, lava, drowning, explosions, fall damage, starvation) and makes hostile mobs ignore and repel away from the AFK player. Resumes normal play instantly upon moving or taking action. Includes optional automatic kick for idle players on Realms or Dedicated Servers with countdown warning on the action bar, with strict exemption for local play (singleplayer).
+* **AFK Protection (Experimental)**: Automatically detects when a player goes idle (no movement or camera rotation for 60s). Grants temporary invincibility against all damage causes (mobs, fire, lava, drowning, explosions, fall damage, starvation) and makes hostile mobs ignore and repel away from the AFK player. Resumes normal play instantly upon moving or taking action. Includes optional automatic kick for idle players on Realms or Dedicated Servers with countdown warning on the action bar, with strict exemption for local play (singleplayer). Fully supports singleplayer worlds running AI companion or simulated player addons (e.g. Understudy, GameTest bots) by filtering out bots to accurately detect local play.
 
 ---
 
@@ -89,7 +89,7 @@ Available configurations include:
 * `CampfireRegenConfig` — Regeneration rates, defensive perimeter, and damage scaling.
 * `TreeCapitatorConfig` — Max log limits, leaf decay filtering, and sapling spacing.
 * `AutoWaterBucketConfig` — Fall detection sensitivity, clutch trigger distance, and auto-retrieve timing.
-* `AfkProtectionConfig` — Inactivity idle threshold, invincibility duration, mob repel force, status effects, and Realm/Server AFK kick timeout with local play exemption.
+* `AfkProtectionConfig` — Inactivity idle threshold, invincibility duration, mob repel force, status effects, Realm/Server AFK kick timeout, and AI / simulated player bot support.
 
 ---
 

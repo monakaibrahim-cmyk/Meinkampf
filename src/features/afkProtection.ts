@@ -53,6 +53,9 @@ export function isPlayerAfkInvincible(player: Player): boolean {
     if (!AfkProtectionConfig.enabled || !AfkProtectionConfig.protectFromAllDamage) {
         return false;
     }
+    if (AfkProtectionConfig.exemptAiPlayersFromAfk && isAiOrSimulatedPlayer(player)) {
+        return false;
+    }
     const state = playerStates.get(player.id);
     if (!state || !state.isAfk) {
         return false;
@@ -68,16 +71,87 @@ export function isPlayerAfkInvincible(player: Player): boolean {
  * Checks whether a player is currently marked as AFK.
  */
 export function isPlayerAfk(player: Player): boolean {
+    if (AfkProtectionConfig.exemptAiPlayersFromAfk && isAiOrSimulatedPlayer(player)) {
+        return false;
+    }
     const state = playerStates.get(player.id);
     return Boolean(state && state.isAfk);
+}
+
+/**
+ * Detects whether a player is an AI player, simulated player, or bot from an addon.
+ * Checks for:
+ * 1. Native SimulatedPlayer methods (from @minecraft/server-gametest or script addons)
+ *    such as navigateToLocation, navigateToEntity, moveRelative.
+ * 2. Addon bot tags (configured in AfkProtectionConfig.aiPlayerTags, or common defaults
+ *    like bot, simulated, fakeplayer, understudy, etc.).
+ * 3. Bot name conventions (e.g., [Bot], Bot_, [AI], AI_).
+ */
+export function isAiOrSimulatedPlayer(player: Player): boolean {
+    if (!player || !player.isValid) return false;
+
+    // 1. Native SimulatedPlayer method checks
+    const pAny = player as any;
+    if (
+        typeof pAny.navigateToLocation === "function" ||
+        typeof pAny.navigateToEntity === "function" ||
+        typeof pAny.moveRelative === "function"
+    ) {
+        return true;
+    }
+
+    // 2. Addon bot tag checks
+    try {
+        const configuredTags = AfkProtectionConfig.aiPlayerTags ?? [];
+        for (const tag of configuredTags) {
+            if (player.hasTag(tag)) {
+                return true;
+            }
+        }
+
+        const tags = player.getTags();
+        for (const tag of tags) {
+            const lower = tag.toLowerCase();
+            if (
+                lower === "bot" ||
+                lower === "fakeplayer" ||
+                lower === "fake_player" ||
+                lower === "ai_player" ||
+                lower === "ai" ||
+                lower === "simulated" ||
+                lower === "simulated_player" ||
+                lower === "understudy" ||
+                lower === "npc" ||
+                lower.startsWith("bot:") ||
+                lower.startsWith("ai:")
+            ) {
+                return true;
+            }
+        }
+    } catch {}
+
+    // 3. Common bot name patterns
+    const name = player.name;
+    if (
+        name.startsWith("[Bot]") ||
+        name.startsWith("Bot_") ||
+        name.startsWith("bot_") ||
+        name.startsWith("[AI]") ||
+        name.startsWith("AI_")
+    ) {
+        return true;
+    }
+
+    return false;
 }
 
 /**
  * Determines whether the current session is running in a local singleplayer environment.
  * - If `AfkProtectionConfig.environment` is "local", strictly returns true (no kicks).
  * - If `AfkProtectionConfig.environment` is "server", strictly returns false (kicks allowed if enabled).
- * - If `AfkProtectionConfig.environment` is "auto", checks player count. In singleplayer offline worlds,
- *   world.getAllPlayers().length <= 1, which is treated as local play to prevent kicking the local player/host.
+ * - If `AfkProtectionConfig.environment` is "auto", checks player count.
+ *   When `ignoreAiPlayersInLocalCheck` is true, AI / simulated players are filtered out so that
+ *   a single human playing with AI companion or farm bots is accurately detected as local play (never kicked).
  */
 export function isLocalPlay(): boolean {
     if (AfkProtectionConfig.environment === "local") {
@@ -86,8 +160,14 @@ export function isLocalPlay(): boolean {
     if (AfkProtectionConfig.environment === "server") {
         return false;
     }
-    const players = Array.from(world.getAllPlayers());
-    return players.length <= 1;
+
+    const allPlayers = Array.from(world.getAllPlayers());
+    if (AfkProtectionConfig.ignoreAiPlayersInLocalCheck) {
+        const humanPlayers = allPlayers.filter((p) => !isAiOrSimulatedPlayer(p));
+        return humanPlayers.length <= 1;
+    }
+
+    return allPlayers.length <= 1;
 }
 
 /**
@@ -114,6 +194,9 @@ export function kickAfkPlayer(player: Player, reason?: string): boolean {
  */
 export function activateAfk(player: Player, manual = false): boolean {
     if (!player || !player.isValid) return false;
+    if (AfkProtectionConfig.exemptAiPlayersFromAfk && isAiOrSimulatedPlayer(player)) {
+        return false;
+    }
     const state = getPlayerState(player);
     if (state.isAfk) return true;
 
@@ -224,6 +307,9 @@ export function deactivateAfk(player: Player): void {
  */
 export function recordPlayerActivity(player: Player): void {
     if (!player || !player.isValid) return;
+    if (AfkProtectionConfig.exemptAiPlayersFromAfk && isAiOrSimulatedPlayer(player)) {
+        return;
+    }
     const state = getPlayerState(player);
     state.lastActivityTime = Date.now();
 
@@ -247,6 +333,11 @@ export function processAfkMonitoring(): void {
 
     for (const player of players) {
         if (!player || !player.isValid) continue;
+
+        // Skip AI / simulated players if exempt
+        if (AfkProtectionConfig.exemptAiPlayersFromAfk && isAiOrSimulatedPlayer(player)) {
+            continue;
+        }
 
         try {
             const state = getPlayerState(player);
@@ -460,6 +551,10 @@ export function initAfkProtectionFeature(): void {
             if (!hurtEntity || !hurtEntity.isValid) return;
 
             if (hurtEntity instanceof Player) {
+                if (AfkProtectionConfig.exemptAiPlayersFromAfk && isAiOrSimulatedPlayer(hurtEntity)) {
+                    return;
+                }
+
                 if (isPlayerAfkInvincible(hurtEntity)) {
                     event.cancel = true;
 

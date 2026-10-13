@@ -1340,6 +1340,42 @@ export const AfkProtectionConfig = {
     kickReason: "Kicked for being AFK for too long.",
 
     /**
+     * AI & SIMULATED PLAYER SUPPORT
+     * Supports singleplayer worlds running AI companion or simulated player addons (e.g. Understudy, GameTest bots).
+     */
+
+    /**
+     * Exclude AI / simulated players when detecting singleplayer local play in "auto" mode.
+     * When true, simulated/bot players are not counted as human players, ensuring that a single human
+     * player playing with AI bots is correctly recognized as singleplayer (local play) and never kicked.
+     * Default: true
+     */
+    ignoreAiPlayersInLocalCheck: true,
+
+    /**
+     * Exempt AI / simulated players from AFK protection monitoring and disconnect kicks.
+     * Prevents bot companions and farming bots from having AFK status effects applied or being kicked.
+     * Default: true
+     */
+    exemptAiPlayersFromAfk: true,
+
+    /**
+     * Additional tag identifiers used by addons to mark AI / bot players.
+     * Native SimulatedPlayers (with navigation methods) are automatically detected regardless of tags.
+     */
+    aiPlayerTags: [
+        "bot",
+        "fakeplayer",
+        "fake_player",
+        "ai_player",
+        "ai",
+        "simulated",
+        "simulated_player",
+        "understudy",
+        "npc",
+    ],
+
+    /**
      * Check interval in ticks for the AFK monitor loop (20 ticks = 1 second).
      * Default: 20 ticks
      */
