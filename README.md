@@ -4,8 +4,6 @@
 
 A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Edition (1.21+)** built with the modern Script API (`@minecraft/server`). Designed to reduce repetitive survival micromanagement while maintaining balanced vanilla mechanics.
 
-💬 **Community Discord:** [https://discord.gg/uNsbXYaQB](https://discord.gg/uNsbXYaQB)
-
 ---
 
 ## Features
@@ -135,13 +133,6 @@ Build artifacts are generated in [`dist/`](dist/):
   * Configure repository secrets `CURSEFORGE_API_KEY` (or `CURSEFORGE_TOKEN`) and `CURSEFORGE_PROJECT_ID` (numeric project ID).
   * Automatically uploads the compiled `.mcaddon` bundle to your CurseForge project with changelog, Bedrock game version detection, and release type (`release` on `main`, `beta` on `development`).
   * Can also be run locally or in custom scripts via `npm run curseforge:upload`.
-
----
-
-## Community & Discord
-
-Join our official Discord community for discussion, bug reports, feature requests, and early development builds:
-👉 **[Join Discord Server (discord.gg/uNsbXYaQB)](https://discord.gg/uNsbXYaQB)**
 
 ---
 
