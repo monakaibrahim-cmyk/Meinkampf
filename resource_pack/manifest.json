@@ -4,16 +4,27 @@
     "name": "Bedrock QoL Suite (Resource Pack)",
     "description": "QoL Textures.",
     "uuid": "c722186a-c379-414b-a9e6-8fd55187cbe4",
-    "version": [1, 0, 2],
-    "min_engine_version": [1, 21, 0]
+    "version": [
+      1,
+      0,
+      3
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      0
+    ]
   },
   "modules": [
     {
       "description": "Resource module",
       "type": "resources",
       "uuid": "d1fc0ed2-e32c-45b7-ad09-24a9db51b452",
-      "version": [1, 0, 2]
+      "version": [
+        1,
+        0,
+        3
+      ]
     }
   ]
 }
-

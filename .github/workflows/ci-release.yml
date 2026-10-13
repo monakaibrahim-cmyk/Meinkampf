@@ -49,7 +49,7 @@ jobs:
         run: npm run build
 
       - name: Test package build
-        run: npm run pack
+        run: npm run pack -- --no-bump
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -57,6 +57,18 @@ jobs:
           name: bedrock-qol-addon
           path: dist/**/*.mcaddon
           retention-days: 7
+
+      - name: Notify Discord on failure
+        if: failure()
+        run: node scripts/discord-notify.js failure
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Notify Discord on commit push
+        if: success() && github.event_name == 'push'
+        run: node scripts/discord-notify.js commit
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
 
   release:
     name: Publish Release
@@ -79,7 +91,7 @@ jobs:
         run: npm ci
 
       - name: Build distribution package
-        run: npm run pack
+        run: npm run pack -- --no-bump
 
       - name: Determine release metadata
         id: meta
@@ -97,3 +109,12 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify Discord on release
+        if: success()
+        run: node scripts/discord-notify.js release
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.meta.outputs.title }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}

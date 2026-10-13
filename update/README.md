@@ -6,6 +6,12 @@ Directory of version patches and changelogs for the Bedrock QoL Suite add-on.
 
 ## Release History
 
+* **[v1.0.3 (Automation & CI/CD Update)](./v1.0.3.md)**:
+  * Automated packaging script with explicit version arguments (`npm run pack 1.0.3`) and smart patch auto-incrementing.
+  * Synchronized manifests and package versioning with clean `dist/v<version>/` output directories.
+  * Added Discord webhook notifications for commits, releases, and workflow failures.
+  * Full GitHub Actions pipeline supporting stable production and beta/alpha development releases.
+
 * **[v1.0.2 (Hotfix Update)](./v1.0.2.md)**:
   * Restored standard chest punch breaking: removed punch/attack interception on chests/containers so players can destroy chests normally.
   * Accessing container sorting options now requires equipping the ⚡ Quick Sorter tool and right-clicking on the chest.

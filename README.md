@@ -103,18 +103,31 @@ npm run typecheck
 # Bundle scripts into behavior pack
 npm run build
 
-# Package distribution .mcaddon into dist/
+# Package distribution .mcaddon into dist/ (auto-increments patch version)
 npm run pack
+
+# Package with explicit version (updates manifests and package.json)
+npm run pack 1.0.3
 ```
 
 Build artifacts are generated in [`dist/`](dist/):
-* `dist/BedrockQoL_<version>/BedrockQoL_<version>.mcaddon` — Combined Behavior & Resource Pack archive.
+* `dist/v<version>/BedrockQoL_<version>.mcaddon` — Combined Behavior & Resource Pack archive.
+
+---
+
+## CI/CD & Webhook Notifications
+
+* **GitHub Actions Workflow:** Automatically runs linting, manifest verification, type checking, and bundling on pushes and pull requests.
+* **Dual-Channel Releases:**
+  * `main` branch: Publishes production releases.
+  * `development` branch: Generates preview Beta/Alpha pre-releases.
+* **Discord Integration:** Set repository secret `DISCORD_WEBHOOK` to receive rich notifications on commits, releases, and workflow check failures.
 
 ---
 
 ## Changelog
 
-See [`update/README.md`](update/README.md) for release history and [`update/v1.0.2.md`](update/v1.0.2.md) for the latest release notes.
+See [`update/README.md`](update/README.md) for release history and [`update/v1.0.3.md`](update/v1.0.3.md) for the latest release notes.
 
 ---
 

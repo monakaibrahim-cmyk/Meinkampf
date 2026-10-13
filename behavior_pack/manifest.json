@@ -4,8 +4,16 @@
     "name": "Bedrock QoL Suite",
     "description": "Collections of QoL Features.",
     "uuid": "f559b00c-2166-4d05-be0d-08fede11a8c6",
-    "version": [1, 0, 2],
-    "min_engine_version": [1, 21, 0]
+    "version": [
+      1,
+      0,
+      3
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      0
+    ]
   },
   "modules": [
     {
@@ -13,14 +21,22 @@
       "type": "script",
       "language": "javascript",
       "uuid": "f08f341f-e14f-4ed6-85d2-296b5a9f5987",
-      "version": [1, 0, 2],
+      "version": [
+        1,
+        0,
+        3
+      ],
       "entry": "scripts/main.js"
     },
     {
       "description": "Entity data module",
       "type": "data",
       "uuid": "e73a56bc-49d2-43bb-8b18-b8d4f40f35a9",
-      "version": [1, 0, 2]
+      "version": [
+        1,
+        0,
+        3
+      ]
     }
   ],
   "dependencies": [
@@ -34,11 +50,14 @@
     },
     {
       "uuid": "c722186a-c379-414b-a9e6-8fd55187cbe4",
-      "version": [1, 0, 2]
+      "version": [
+        1,
+        0,
+        3
+      ]
     }
   ],
   "metadata": {
     "product_type": "addon"
   }
 }
-
