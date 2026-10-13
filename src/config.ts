@@ -194,25 +194,11 @@ export const FarmingConfig = {
         fastGrowth: true,
 
         /**
-         * Base growth duration for standard crops in Minecraft ticks.
-         * 24,000 ticks = 1 in-game day (20 real-time minutes), matching vanilla Minecraft crop growth.
-         * Default: 24000
-         */
-        defaultFullGrowthTicks: 24000,
-
-        /**
-         * Growth rate multiplier applied to default crops (1.25 = 125% speed, 25% faster than default).
-         * Target duration for standard crops: 24,000 / 1.25 = 19,200 ticks (16 minutes).
-         * Default: 1.25
+         * Growth rate multiplier applied to default crops (1.25 = 125% speed, 25% faster than default; 2 = 200% speed).
+         * Standard crops take 24,000 / growthRateMultiplier ticks to grow to maturity.
+         * Default: 2
          */
         growthRateMultiplier: 2,
-
-        /**
-         * Target duration for standard crops to grow from planting to full maturity (in game ticks).
-         * Effective: defaultFullGrowthTicks / growthRateMultiplier = 19,200 ticks (16 minutes).
-         * Default: 19200
-         */
-        targetFullGrowthTicks: 19200,
 
         /**
          * Sweet Berry Bush and Glow Berries are exempt from default rate and use fast growth.
@@ -402,12 +388,6 @@ export const DynamicLightingConfig = {
     mainHand: true,
 
     /**
-     * Emit light when holding a light source in the offhand.
-     * Default: true
-     */
-    offHand: true,
-
-    /**
      * Tick interval for checking held light (4 ticks = 200ms).
      * Default: 4
      */
@@ -447,8 +427,7 @@ export const DurabilityConfig = {
 export const AutoTotemConfig = {
     /**
      * Enable Auto Totem of Undying protection.
-     * Automatically saves players from fatal damage if a totem exists in offhand, mainhand, hotbar, or backpack.
-     * Offhand is never automatically populated, allowing players to freely hold torches, lanterns, or shields.
+     * Automatically saves players from fatal damage if a totem exists in inventory or hotbar.
      * Default: true
      */
     enabled: true,
@@ -473,7 +452,7 @@ export const AutoTotemConfig = {
     voidRescue: true,
 
     /**
-     * Display an alert on screen when a totem activates from backpack or offhand.
+     * Display an alert on screen when a totem activates from backpack or hotbar.
      * Default: true
      */
     notifyPlayer: true,
@@ -786,12 +765,6 @@ export const AutoShieldConfig = {
     blockFrontOnly: true,
 
     /**
-     * Automatically equip a shield from inventory/hotbar into an empty offhand slot.
-     * Default: true
-     */
-    autoEquipToOffhand: false,
-
-    /**
      * Play authentic Minecraft shield block sound upon blocking an attack.
      * Default: true
      */
@@ -812,7 +785,7 @@ export const AutoShieldConfig = {
 
 export const PassivePotionConfig = {
     /**
-     * Enable passive buff effects from carrying positive potions in inventory, hotbar, mainhand, or offhand
+     * Enable passive buff effects from carrying positive potions in inventory or hotbar
      * without needing to drink or throw them.
      * Default: true
      */
@@ -848,12 +821,6 @@ export const PassivePotionConfig = {
      * Default: true
      */
     includeHotbar: true,
-
-    /**
-     * Check offhand slot.
-     * Default: true
-     */
-    includeOffhand: true,
 
     /**
      * Periodically heal player if holding a Healing potion and below max health (in ticks).
@@ -1383,9 +1350,9 @@ export const AfkProtectionConfig = {
 export const SmartElytraConfig = {
     /**
      * Enable smart and manual Elytra <--> Chestplate switching.
-     * Default: true
+     * Default: false
      */
-    enabled: true,
+    enabled: false,
 
     /**
      * MANUAL SWITCH CONTROLS
@@ -1394,9 +1361,9 @@ export const SmartElytraConfig = {
     manualSwitch: {
         /**
          * Enable manual hotkey switching.
-         * Default: true
+         * Default: false
          */
-        enabled: true,
+        enabled: false,
 
         /**
          * Hotkey trigger method:
@@ -1435,9 +1402,9 @@ export const SmartElytraConfig = {
     smartSwitch: {
         /**
          * Enable automatic context-aware switching.
-         * Default: true
+         * Default: false
          */
-        enabled: true,
+        enabled: false,
 
         /**
          * Auto-equip Elytra when in mid-air (jumping while airborne, or falling from height).

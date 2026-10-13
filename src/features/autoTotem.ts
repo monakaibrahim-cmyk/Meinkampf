@@ -14,32 +14,31 @@ import { AutoTotemConfig } from "../config";
 import { showPlayerNotification } from "../utils/notifications";
 
 interface TotemLocation {
-    location: "offhand" | "mainhand" | "inventory";
-    slotIndex?: number;
-    equipmentSlot?: EquipmentSlot;
+    location: "inventory";
+    slotIndex: number;
 }
 
 /**
- * Searches the player's offhand, mainhand, hotbar, and entire backpack for a Totem of Undying.
+ * Searches the player's hotbar and backpack (inventory slots 0-35) for a Totem of Undying.
+ * If the player already holds a totem in their hands, vanilla Bedrock handles it natively.
  */
 export function findTotem(player: Player): TotemLocation | undefined {
     try {
         const equippable = player.getComponent(EntityComponentTypes.Equippable);
         if (equippable) {
-            // 1. Offhand
+            // If already holding a totem, vanilla Bedrock handles it natively
             const offhand = equippable.getEquipment(EquipmentSlot.Offhand);
             if (offhand && offhand.typeId === "minecraft:totem_of_undying") {
-                return { location: "offhand", equipmentSlot: EquipmentSlot.Offhand };
+                return undefined;
             }
 
-            // 2. Mainhand
             const mainhand = equippable.getEquipment(EquipmentSlot.Mainhand);
             if (mainhand && mainhand.typeId === "minecraft:totem_of_undying") {
-                return { location: "mainhand", equipmentSlot: EquipmentSlot.Mainhand };
+                return undefined;
             }
         }
 
-        // 3. Hotbar & Backpack (all inventory slots 0-35)
+        // Search Hotbar & Backpack (all inventory slots 0-35)
         const invComp = player.getComponent(EntityComponentTypes.Inventory);
         if (invComp && invComp.container) {
             const container = invComp.container;
@@ -114,31 +113,10 @@ export function mergeInventoryTotems(player: Player): boolean {
 function activateTotemEffects(player: Player, totemLoc: TotemLocation): void {
     if (!player || !player.isValid) return;
     try {
-        const equippable = player.getComponent(EntityComponentTypes.Equippable);
         const invComp = player.getComponent(EntityComponentTypes.Inventory);
 
-        // 1. Consume 1 Totem of Undying from the exact slot where it was found
-        if (totemLoc.location === "offhand" && equippable) {
-            const offhand = equippable.getEquipment(EquipmentSlot.Offhand);
-            if (offhand) {
-                if (offhand.amount > 1) {
-                    offhand.amount -= 1;
-                    equippable.setEquipment(EquipmentSlot.Offhand, offhand);
-                } else {
-                    equippable.setEquipment(EquipmentSlot.Offhand, undefined);
-                }
-            }
-        } else if (totemLoc.location === "mainhand" && equippable) {
-            const mainhand = equippable.getEquipment(EquipmentSlot.Mainhand);
-            if (mainhand) {
-                if (mainhand.amount > 1) {
-                    mainhand.amount -= 1;
-                    equippable.setEquipment(EquipmentSlot.Mainhand, mainhand);
-                } else {
-                    equippable.setEquipment(EquipmentSlot.Mainhand, undefined);
-                }
-            }
-        } else if (totemLoc.location === "inventory" && invComp && invComp.container && totemLoc.slotIndex !== undefined) {
+        // 1. Consume 1 Totem of Undying from inventory slot
+        if (invComp && invComp.container) {
             const container = invComp.container;
             const item = container.getItem(totemLoc.slotIndex);
             if (item) {
@@ -225,12 +203,7 @@ function activateTotemEffects(player: Player, totemLoc: TotemLocation): void {
 
         // 8. Player notification
         if (AutoTotemConfig.notifyPlayer) {
-            const slotName =
-                totemLoc.location === "inventory"
-                    ? "Backpack / Hotbar"
-                    : totemLoc.location === "offhand"
-                    ? "Offhand"
-                    : "Main Hand";
+            const slotName = "Backpack / Hotbar";
             showPlayerNotification(player, `§e✨ Totem of Undying Activated from ${slotName}! ✨§r`);
             player.sendMessage(`§e[Auto Totem]§r §aCheated death using a Totem from your ${slotName}!§r`);
         }
@@ -263,7 +236,7 @@ export function initAutoTotemFeature(): void {
             return;
         }
 
-        // Check for Totem anywhere in offhand, mainhand, hotbar, or backpack
+        // Check for Totem in hotbar or backpack
         const totemLoc = findTotem(player);
         if (!totemLoc) {
             return; // No totem available

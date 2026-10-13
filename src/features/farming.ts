@@ -232,7 +232,7 @@ export function getCropFullGrowthTicks(cropTypeId?: string): number {
         return FarmingConfig.growth.berriesFullGrowthTicks ?? 100;
     }
 
-    const base = FarmingConfig.growth.defaultFullGrowthTicks ?? 24000;
+    const base = 24000;
     const mult = FarmingConfig.growth.growthRateMultiplier ?? 1.25;
     return Math.round(base / mult);
 }

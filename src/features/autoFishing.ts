@@ -132,9 +132,7 @@ function processCatch(session: FishingSession): void {
 
         try {
             const equippable = player.getComponent(EntityComponentTypes.Equippable);
-            const mainhand = equippable?.getEquipment(EquipmentSlot.Mainhand);
-            const offhand = equippable?.getEquipment(EquipmentSlot.Offhand);
-            const rod = (mainhand && mainhand.typeId === "minecraft:fishing_rod") ? mainhand : offhand;
+            const rod = equippable?.getEquipment(EquipmentSlot.Mainhand);
 
             if (rod) {
                 const enchantable = rod.getComponent(ItemComponentTypes.Enchantable) as ItemEnchantableComponent | undefined;
@@ -301,16 +299,12 @@ export function initAutoFishingFeature(): void {
                 continue;
             }
 
-            // Check if player is holding a fishing rod (mainhand or offhand)
+            // Check if player is holding a fishing rod in mainhand
             let holdingRod = false;
             try {
                 const equippable = player.getComponent(EntityComponentTypes.Equippable);
                 const mainhand = equippable?.getEquipment(EquipmentSlot.Mainhand);
-                const offhand = equippable?.getEquipment(EquipmentSlot.Offhand);
-                holdingRod = Boolean(
-                    (mainhand && mainhand.typeId === "minecraft:fishing_rod") ||
-                    (offhand && offhand.typeId === "minecraft:fishing_rod")
-                );
+                holdingRod = Boolean(mainhand && mainhand.typeId === "minecraft:fishing_rod");
             } catch {
                 holdingRod = false;
             }
@@ -379,12 +373,8 @@ export function initAutoFishingFeature(): void {
             try {
                 const equippable = player.getComponent(EntityComponentTypes.Equippable);
                 const mainhand = equippable?.getEquipment(EquipmentSlot.Mainhand);
-                const offhand = equippable?.getEquipment(EquipmentSlot.Offhand);
 
-                if (
-                    (mainhand && mainhand.typeId === "minecraft:fishing_rod") ||
-                    (offhand && offhand.typeId === "minecraft:fishing_rod")
-                ) {
+                if (mainhand && mainhand.typeId === "minecraft:fishing_rod") {
                     if (playerHooks.has(player.id)) {
                         showPlayerNotification(player, "§b🎣 AFK Auto Fishing: Waiting for bite...§r", 1500);
                     }

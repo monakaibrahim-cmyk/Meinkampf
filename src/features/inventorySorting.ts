@@ -171,7 +171,7 @@ export function getPlayerContainer(player: Player): Container | undefined {
 }
 
 /**
- * Audits the player's inventory and offhand for the Quick Sorter.
+ * Audits the player's inventory for the Quick Sorter.
  * - Guarantees keepOnDeath and ItemLockMode.inventory.
  * - Upgrades legacy compass sorters.
  * - Removes any duplicate sorters if more than one exists.
@@ -210,36 +210,10 @@ export function auditPlayerSorter(player: Player): boolean {
         }
     }
 
-    // Check equippable offhand and mainhand
+    // Check equippable mainhand
     try {
         const eq = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
         if (eq) {
-            const offhand = eq.getEquipment(EquipmentSlot.Offhand);
-            if (offhand && isSorterItem(offhand)) {
-                if (!hasOne) {
-                    hasOne = true;
-                    let changed = false;
-                    if (!offhand.keepOnDeath) {
-                        offhand.keepOnDeath = true;
-                        changed = true;
-                    }
-                    if (offhand.lockMode !== ItemLockMode.inventory) {
-                        offhand.lockMode = ItemLockMode.inventory;
-                        changed = true;
-                    }
-                    if (changed) {
-                        try {
-                            eq.setEquipment(EquipmentSlot.Offhand, offhand);
-                        } catch {}
-                    }
-                } else {
-                    // Remove duplicate from offhand
-                    try {
-                        eq.setEquipment(EquipmentSlot.Offhand, undefined);
-                    } catch {}
-                }
-            }
-
             const mainhand = eq.getEquipment(EquipmentSlot.Mainhand);
             if (mainhand && isSorterItem(mainhand)) {
                 hasOne = true;
@@ -253,7 +227,7 @@ export function auditPlayerSorter(player: Player): boolean {
 }
 
 /**
- * Checks if a player currently has the Quick Sorter in their inventory or offhand.
+ * Checks if a player currently has the Quick Sorter in their inventory.
  */
 export function hasSorterItem(player: Player): boolean {
     return auditPlayerSorter(player);
@@ -476,8 +450,7 @@ export function initInventorySortingFeature(): void {
 
             const equippable = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
             const mainhandItem = equippable?.getEquipment(EquipmentSlot.Mainhand);
-            const offhandItem = equippable?.getEquipment(EquipmentSlot.Offhand);
-            const holdingSorter = isSorterItem(event.itemStack) || isSorterItem(mainhandItem) || isSorterItem(offhandItem);
+            const holdingSorter = isSorterItem(event.itemStack) || isSorterItem(mainhandItem);
 
             // Holding the sorter item opens container/backpack sorter interface
             if (InventorySortingConfig.useSorterItem && holdingSorter) {

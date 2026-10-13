@@ -145,23 +145,17 @@ function updatePlayerLight(player: Player): void {
     }
 
     let mainhandLight = 0;
-    let offhandLight = 0;
 
     try {
         const equippable = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
-        if (equippable) {
-            if (DynamicLightingConfig.mainHand) {
-                mainhandLight = getItemLightLevel(equippable.getEquipment(EquipmentSlot.Mainhand));
-            }
-            if (DynamicLightingConfig.offHand) {
-                offhandLight = getItemLightLevel(equippable.getEquipment(EquipmentSlot.Offhand));
-            }
+        if (equippable && DynamicLightingConfig.mainHand) {
+            mainhandLight = getItemLightLevel(equippable.getEquipment(EquipmentSlot.Mainhand));
         }
     } catch {
         // Equipment query safety
     }
 
-    const currentLight = Math.max(mainhandLight, offhandLight);
+    const currentLight = mainhandLight;
 
     if (currentLight === 0) {
         clearPlayerLight(player.id);

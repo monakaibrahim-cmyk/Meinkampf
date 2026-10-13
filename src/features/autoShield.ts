@@ -20,7 +20,6 @@ export function isShield(item?: ItemStack): boolean {
 
 /**
  * Checks if the player has a shield equipped (offhand or mainhand).
- * Optionally auto-equips from inventory if offhand is empty.
  */
 export function getEquippedShieldSlot(player: Player): EquipmentSlot | undefined {
     try {
@@ -32,21 +31,6 @@ export function getEquippedShieldSlot(player: Player): EquipmentSlot | undefined
 
         const mainhand = equippable.getEquipment(EquipmentSlot.Mainhand);
         if (isShield(mainhand)) return EquipmentSlot.Mainhand;
-
-        // Auto-equip to offhand if configured and offhand is empty
-        if (AutoShieldConfig.autoEquipToOffhand && !offhand) {
-            const container = (player.getComponent(EntityComponentTypes.Inventory) as any)?.container;
-            if (container) {
-                for (let i = 0; i < container.size; i++) {
-                    const item = container.getItem(i);
-                    if (isShield(item)) {
-                        equippable.setEquipment(EquipmentSlot.Offhand, item);
-                        container.setItem(i, undefined);
-                        return EquipmentSlot.Offhand;
-                    }
-                }
-            }
-        }
     } catch {
         // Fallback
     }

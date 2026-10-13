@@ -45,7 +45,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 * **Morning Creeper Despawn & Daylight Burn**: Surface creepers exposed to morning sunlight catch fire and burn in daylight like zombies and skeletons, with configurable burning, fizzing smoke poof particles, and despawn behavior. Underground caves, ravines, and named creepers are completely protected.
 * **Experience Magnet**: Collects loose XP orbs within 32 blocks toward the player.
 * **Ground Egg Incubation**: Laid chicken eggs on ground incubate over 30 seconds and hatch into chicks, subject to local density limits.
-* **Auto Totem**: Triggers Totem of Undying protection from inventory without overriding the offhand equipment slot.
+* **Auto Totem**: Triggers Totem of Undying protection directly from inventory/hotbar without requiring a totem in hand.
 * **Auto Shield**: Raises an equipped shield against incoming attacks.
 * **Auto Fishing**: Detects bobber movement and recasts automatically.
 * **Campfire Defense, Healing & Debuffs**: Lit campfires provide area-of-effect regeneration for players, pets, neutral mobs (e.g. iron golems, bees, pandas), and passive mobs (e.g. livestock, villagers). Hostile mobs within 10 blocks are repelled, kept continuously on fire (3s duration), take campfire damage, and receive tactical debuffs (Slowness, Weakness, Mining Fatigue, anti-regen suppression, and soul smoke Blindness). Named hostile mobs (custom name tags) are completely exempt from damage, burning, debuffs, and knockback to protect trophy mobs and farm setups (e.g. iron farm zombies).
@@ -55,7 +55,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 * **Auto Water Bucket (MLG Clutch)**: Automatically performs an MLG water bucket clutch when falling from heights that would cause damage or death. Places water right before impact to negate all fall damage, then auto-retrieves it into the bucket 3 ticks later to prevent flooding.
 * **Immortal Pets**: Tamed pets and mounts are protected against fatal damage.
 * **AFK Protection (Experimental)**: Automatically detects when a player goes idle (no movement or camera rotation for 60s). Grants temporary invincibility against all damage causes (mobs, fire, lava, drowning, explosions, fall damage, starvation) and makes hostile mobs ignore and repel away from the AFK player. Resumes normal play instantly upon moving or taking action. Includes optional automatic kick for idle players on Realms or Dedicated Servers with countdown warning on the action bar, with strict exemption for local play (singleplayer). Fully supports singleplayer worlds running AI companion or simulated player addons (e.g. Understudy, GameTest bots) by filtering out bots to accurately detect local play.
-* **Smart Elytra & Chestplate Switch (Experimental)**: Seamlessly swaps between an equipped Elytra and protective chestplate without opening or organizing your inventory. Context-aware intelligent switching auto-equips Elytra when airborne (jumping in mid-air, falling, or using a firework rocket) and automatically restores your best chestplate upon safe landing or when taking mob damage on the ground. Includes broken-Elytra durability protection (<= 1 durability). Manual switching is supported via Double-Sneak (Shift x2 on PC, Crouch x2 on Mobile touch controls), Sneak + Jump (Shift + Space), and configurable PC hotkeys/macros via `/scriptevent qol:elytra_swap` or `/scriptevent qol:swap`.
+* **Smart Elytra & Chestplate Switch (Disabled by default)**: Seamlessly swaps between an equipped Elytra and protective chestplate without opening or organizing your inventory. Context-aware intelligent switching auto-equips Elytra when airborne (jumping in mid-air, falling, or using a firework rocket) and automatically restores your best chestplate upon safe landing or when taking mob damage on the ground. Includes broken-Elytra durability protection (<= 1 durability). Manual switching is supported via Double-Sneak (Shift x2 on PC, Crouch x2 on Mobile touch controls), Sneak + Jump (Shift + Space), and configurable PC hotkeys/macros via `/scriptevent qol:elytra_swap` or `/scriptevent qol:swap`.
 
 ---
 
@@ -79,7 +79,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 Settings and feature toggles can be customized in [`src/config.ts`](src/config.ts).
 
 Available configurations include:
-* `DynamicLightingConfig` — Lighting updates and offhand equipment rules.
+* `DynamicLightingConfig` — Lighting updates and handheld light sources.
 * `FarmingConfig` — Growth rates, harvest radii, and hydration behavior.
 * `InventorySortingConfig` — Sort methods, hotbar locking, and container triggers.
 * `XpMagnetConfig` — Collection radius and pull physics.

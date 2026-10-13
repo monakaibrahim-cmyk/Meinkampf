@@ -160,7 +160,7 @@ export function getPositiveBuffFromItem(item?: ItemStack): PotionBuffDefinition 
 const lastHealTickMap = new Map<string, number>();
 
 /**
- * Scans a player's inventory, hotbar, mainhand, and offhand for positive buff potions
+ * Scans a player's inventory, hotbar, and mainhand for positive buff potions
  * and applies the highest tier buff for each effect.
  */
 function updatePlayerPotionBuffs(player: Player, currentTick: number): void {
@@ -202,28 +202,6 @@ function updatePlayerPotionBuffs(player: Player, currentTick: number): void {
         }
     }
 
-    // 2. Scan Offhand & Mainhand
-    if (PassivePotionConfig.includeOffhand) {
-        try {
-            const equippable = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
-            if (equippable) {
-                const offhand = equippable.getEquipment(EquipmentSlot.Offhand);
-                const offhandBuff = getPositiveBuffFromItem(offhand);
-                if (offhandBuff) {
-                    if (offhandBuff.isHealing) {
-                        highestHealingAmplifier = Math.max(highestHealingAmplifier ?? -1, offhandBuff.amplifier);
-                    } else {
-                        const existingAmp = positiveEffects.get(offhandBuff.effectType);
-                        if (existingAmp === undefined || offhandBuff.amplifier > existingAmp) {
-                            positiveEffects.set(offhandBuff.effectType, offhandBuff.amplifier);
-                        }
-                    }
-                }
-            }
-        } catch {
-            // Equippable access safety
-        }
-    }
 
     // 3. Apply continuous positive buffs
     for (const [effectType, amplifier] of positiveEffects.entries()) {
