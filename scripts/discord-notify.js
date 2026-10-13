@@ -269,7 +269,7 @@ async function sendDiscordNotification() {
     }
 
     const payload = {
-        username: eventType === "release" ? "Bedrock QoL Releases" : "Bedrock QoL CI",
+        username: process.env.DISCORD_USERNAME || "Meinkampf",
         embeds: [embed]
     };
 
