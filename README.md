@@ -130,7 +130,7 @@ Build artifacts are generated in [`dist/`](dist/):
   * `main` branch: Publishes production releases.
   * `development` branch: Generates preview Beta/Alpha pre-releases.
 * **Discord Integration:**
-  * **Dedicated Release Channel (`DISCORD_RELEASE_WEBHOOK`):** Set this repository secret to route release announcements to a specific Discord channel (e.g. `#releases` or `#announcements`). Releases automatically attach the compiled `.mcaddon` file and patch notes `.md` alongside a rich embed with inline notes.
+  * **Dedicated Release Channel (`DISCORD_RELEASE_WEBHOOK`):** Set this repository secret to route release announcements to a specific Discord channel (e.g. `#releases` or `#announcements`). Releases automatically attach the compiled `.mcaddon` file and render the complete changelog directly inside the Discord message embed.
 * **CurseForge Publishing Integration:**
   * Configure repository secrets `CURSEFORGE_API_KEY` (or `CURSEFORGE_TOKEN`) and `CURSEFORGE_PROJECT_ID` (numeric project ID).
   * Automatically uploads the compiled `.mcaddon` bundle to your CurseForge project with changelog, Bedrock game version detection, and release type (`release` on `main`, `beta` on `development`).

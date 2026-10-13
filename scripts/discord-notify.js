@@ -169,40 +169,32 @@ async function sendDiscordNotification() {
                 console.warn(`[Discord Notify] No .mcaddon found for version ${cleanVersion}`);
             }
 
-            // 2. Locate and prepare patch notes attachment
+            // 2. Locate and read patch notes / changelog
             const patchNotesPath = findPatchNotesFile(cleanVersion);
             let patchNotesText = "";
             if (patchNotesPath && existsSync(patchNotesPath)) {
                 try {
-                    patchNotesText = readFileSync(patchNotesPath, "utf8");
-                    const notesFileName = `BedrockQoL_${rawTag}_PatchNotes.md`;
-                    filesToAttach.push({
-                        filename: notesFileName,
-                        buffer: Buffer.from(patchNotesText, "utf8"),
-                        contentType: "text/markdown",
-                        sizeKb: Math.round(Buffer.byteLength(patchNotesText) / 1024)
-                    });
-                    console.log(`[Discord Notify] Attaching patch notes: ${notesFileName}`);
+                    patchNotesText = readFileSync(patchNotesPath, "utf8").trim();
                 } catch (err) {
                     console.warn("[Discord Notify] Failed to read patch notes:", err.message);
                 }
             }
 
-            // 3. Prepare description with highlights / patch notes snippet
+            // 3. Prepare description with highlights and full changelog in embed
             let descriptionPrefix = isPrerelease
-                ? `⚠️ **Development Preview Build (${rawTag})** is ready for testing!\nDownload the attached \`.mcaddon\` file directly to import into Minecraft Bedrock.`
+                ? `⚠️ **Development Preview Build (${rawTag})** is ready for testing!\nDownload the attached \`.mcaddon\` below to install directly into Minecraft Bedrock.`
                 : `🎉 **New Official Release (${rawTag})** is now live!\nDownload the attached \`.mcaddon\` below to install directly into Minecraft Bedrock.`;
 
-            let notesExcerpt = "";
+            let changelogSection = "";
             if (patchNotesText) {
-                // Truncate to ~1200 characters to comfortably fit inside Discord's 4096 embed description limit
-                const maxExcerptLen = 1200;
-                if (patchNotesText.length > maxExcerptLen) {
-                    notesExcerpt = `\n\n### 📋 Patch Notes Preview\n` +
-                        patchNotesText.slice(0, maxExcerptLen).trim() +
-                        `\n\n*(Full patch notes attached below in \`BedrockQoL_${rawTag}_PatchNotes.md\`)*`;
+                // Discord embed description limit is 4096 characters (keep under 3600 for safe headroom)
+                const maxChangelogLen = 3600;
+                if (patchNotesText.length > maxChangelogLen) {
+                    changelogSection = `\n\n### 📋 Changelog\n` +
+                        patchNotesText.slice(0, maxChangelogLen).trim() +
+                        `\n\n... *(view complete changelog on [GitHub Releases](${releaseUrl}))*`;
                 } else {
-                    notesExcerpt = `\n\n### 📋 Patch Notes\n` + patchNotesText.trim();
+                    changelogSection = `\n\n### 📋 Changelog\n` + patchNotesText;
                 }
             }
 
@@ -210,7 +202,7 @@ async function sendDiscordNotification() {
                 title: isPrerelease ? `🧪 Beta Release: ${title}` : `🚀 Official Release: ${title}`,
                 url: releaseUrl,
                 color: isPrerelease ? 0xF1C40F : 0x2ECC71, // Gold for Beta, Green for Stable
-                description: descriptionPrefix + notesExcerpt,
+                description: descriptionPrefix + changelogSection,
                 fields: [
                     { name: "Tag", value: `[\`${rawTag}\`](${releaseUrl})`, inline: true },
                     { name: "Channel", value: isPrerelease ? "Beta / Development" : "Stable Release", inline: true },
@@ -225,7 +217,7 @@ async function sendDiscordNotification() {
                     .map((f) => `📎 **\`${f.filename}\`** (${f.sizeKb} KB)`)
                     .join("\n");
                 embed.fields.push({
-                    name: "Attached Files",
+                    name: "Attached Addon File",
                     value: attachmentList,
                     inline: false
                 });
