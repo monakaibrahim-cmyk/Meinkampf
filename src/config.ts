@@ -961,8 +961,8 @@ export const InventorySortingConfig = {
 
 export const CreeperMorningDespawnConfig = {
     /**
-     * Enable morning creeper despawn mechanic.
-     * Surface creepers exposed to morning sunlight safely despawn with smoke particles,
+     * Enable morning creeper despawn / daylight burning mechanic.
+     * Surface creepers exposed to morning sunlight burn like zombies and/or despawn,
      * preventing base camping creepers when players step outside in the morning.
      * Underground caves, ravines, and named creepers are completely unaffected.
      * Default: true
@@ -970,21 +970,31 @@ export const CreeperMorningDespawnConfig = {
     enabled: true,
 
     /**
-     * Only despawn during early morning (ticks 0 to 6000, dawn to noon).
-     * If false, despawns during any daytime hour (ticks 0 to 12000) when exposed to daylight.
-     * Default: false (despawns when exposed to daylight)
+     * Action to apply to exposed surface creepers:
+     * - "burn": Catches fire and burns in daylight like a zombie / skeleton until death.
+     * - "despawn": Fizzles out with smoke particles and safely despawns immediately.
+     * - "both": Catches fire, emits smoke poof particles, and rapidly burns / despawns.
+     * Default: "burn"
+     */
+    action: "burn" as "burn" | "despawn" | "both",
+
+    /**
+     * Only trigger during morning hours (ticks 23000 to 6000, dawn to noon).
+     * If false, triggers during any daytime hour (ticks 23000 to 12000) when exposed to sunlight.
+     * Default: false (burns/despawns throughout daytime, matching zombie daylight behavior)
      */
     morningOnly: false,
 
     /**
-     * Minimum sky light level required on the creeper to trigger despawn.
-     * Ensures creepers in caves or deep shadows do not despawn.
-     * Default: 14
+     * Minimum sky light level required on the creeper to trigger burn/despawn.
+     * 8 matches vanilla Minecraft's daylight burning threshold for zombies & skeletons.
+     * Default: 8
      */
-    minSkyLightLevel: 14,
+    minSkyLightLevel: 8,
 
     /**
      * Protect creepers that have custom name tags or are named pets.
+     * Automatically keeps named / captive creepers safe from daylight burning.
      * Default: true
      */
     protectNamedCreepers: true,
@@ -992,9 +1002,15 @@ export const CreeperMorningDespawnConfig = {
     /**
      * How often to scan simulation distance for exposed surface creepers (in ticks).
      * 20 ticks = 1 second.
-     * Default: 30 ticks (1.5 seconds)
+     * Default: 20 ticks (1.0 second)
      */
-    checkIntervalTicks: 30,
+    checkIntervalTicks: 20,
+
+    /**
+     * Burn duration in seconds when action is "burn" or "both".
+     * Default: 8 seconds
+     */
+    burnDurationSeconds: 8,
 
     /**
      * Spawn smoke / poof particle effect at the creeper's position when despawning.

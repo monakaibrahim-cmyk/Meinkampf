@@ -94,6 +94,7 @@
         "total_supply": 15
       },
       "minecraft:can_climb": {},
+      "minecraft:burns_in_daylight": {},
       "minecraft:collision_box": {
         "height": 1.8,
         "width": 0.6

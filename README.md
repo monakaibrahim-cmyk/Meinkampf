@@ -44,7 +44,7 @@ A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Editi
 * **Visibility**: Nameplates render at extended distance up to 64 blocks without requiring crosshair targeting.
 
 ### 5. Survival Utilities
-* **Morning Creeper Despawn**: Exposed surface creepers in daylight safely despawn with particle feedback.
+* **Morning Creeper Despawn & Daylight Burn**: Surface creepers exposed to morning sunlight catch fire and burn in daylight like zombies and skeletons, with configurable burning, fizzing smoke poof particles, and despawn behavior. Underground caves, ravines, and named creepers are completely protected.
 * **Experience Magnet**: Collects loose XP orbs within 32 blocks toward the player.
 * **Ground Egg Incubation**: Laid chicken eggs on ground incubate over 30 seconds and hatch into chicks, subject to local density limits.
 * **Auto Totem**: Triggers Totem of Undying protection from inventory without overriding the offhand equipment slot.
@@ -87,6 +87,7 @@ Available configurations include:
 * `InventorySortingConfig` — Sort methods, hotbar locking, and container triggers.
 * `XpMagnetConfig` — Collection radius and pull physics.
 * `CampfireRegenConfig` — Regeneration rates, defensive perimeter, and damage scaling.
+* `CreeperMorningDespawnConfig` — Action modes (burn/despawn), daylight detection thresholds, and pet protection.
 * `TreeCapitatorConfig` — Max log limits, leaf decay filtering, and sapling spacing.
 * `AutoWaterBucketConfig` — Fall detection sensitivity, clutch trigger distance, and auto-retrieve timing.
 * `AfkProtectionConfig` — Inactivity idle threshold, invincibility duration, mob repel force, status effects, Realm/Server AFK kick timeout, and AI / simulated player bot support.
