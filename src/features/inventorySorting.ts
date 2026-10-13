@@ -18,10 +18,6 @@ import {
 import { ActionFormData, ActionFormResponse, FormCancelationReason } from "@minecraft/server-ui";
 import { InventorySortingConfig } from "../config";
 import { showPlayerNotification } from "../utils/notifications";
-import {
-    isPlayerOffhandHoldingLight,
-    equipToOffhandFromAnywhere,
-} from "./dynamicLight";
 
 export type SortType = "category" | "quality" | "alphabetical" | "quantity" | "compact";
 
@@ -463,8 +459,6 @@ export function openContainerSorterForm(player: Player, containerBlocks: Block[]
 export function openBackpackSorterForm(player: Player): void {
     const isHotbarProtected = playerHotbarProtected.get(player.id) ?? InventorySortingConfig.protectHotbarByDefault;
     const refs = getPlayerSlotRefs(player, !isHotbarProtected);
-    const hasOffhandLight = isPlayerOffhandHoldingLight(player);
-
     const form = new ActionFormData()
         .title("§l§2Backpack Sorter")
         .body(
@@ -483,12 +477,6 @@ export function openBackpackSorterForm(player: Player): void {
                 ? "§l§cInclude Hotbar§r\n§8Allow sorting slots 0-8"
                 : "§l§aProtect Hotbar§r\n§8Keep slots 0-8 untouched",
             isHotbarProtected ? "textures/items/diamond_sword" : "textures/items/iron_sword"
-        )
-        .button(
-            hasOffhandLight
-                ? "§l§cUnequip Offhand Light§r\n§8Move torch/lantern back"
-                : "§l§6Torch / Lantern Offhand§r\n§8Equip light source to offhand",
-            "textures/items/torch_on"
         );
 
     showActionFormSafe(player, form, (selection) => {
@@ -507,8 +495,6 @@ export function openBackpackSorterForm(player: Player): void {
             system.run(() => {
                 openBackpackSorterForm(player);
             });
-        } else if (selection === 6) {
-            equipToOffhandFromAnywhere(player);
         }
     });
 }
