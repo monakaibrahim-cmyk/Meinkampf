@@ -1,6 +1,162 @@
 import { readFileSync, existsSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
 
+/**
+ * Checks if a commit modified actual Minecraft Bedrock addon code, behaviors, or resources.
+ * Excludes tooling, CI/CD scripts, documentation, and metadata files.
+ */
+function isAddonCommit(commitHash) {
+    try {
+        const files = execSync(`git diff-tree --no-commit-id --name-only -r ${commitHash}`, { encoding: "utf8" });
+        return files.split("\n").some((f) => {
+            const trimmed = f.trim();
+            return (
+                trimmed.startsWith("src/") ||
+                trimmed.startsWith("behavior_pack/") ||
+                trimmed.startsWith("resource_pack/")
+            );
+        });
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Finds the latest stable release tag (ignoring beta/alpha tags and any tag pointing directly to HEAD).
+ */
+function getPreviousStableTag(targetTag) {
+    try {
+        const raw = execSync('git tag -l "v[0-9]*.[0-9]*.[0-9]*"', { encoding: "utf8" }).trim();
+        if (!raw) return null;
+        let tags = raw.split("\n")
+            .map((t) => t.trim())
+            .filter((t) => !t.includes("beta") && !t.includes("alpha"));
+        if (tags.length === 0) return null;
+
+        const headSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+        tags = tags.filter((t) => {
+            if (t === targetTag) {
+                try {
+                    const tagSha = execSync(`git rev-parse -q --verify "refs/tags/${t}^{commit}"`, { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+                    return tagSha !== "" && tagSha !== headSha;
+                } catch {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        if (tags.length === 0) return null;
+
+        tags.sort((a, b) => {
+            const pa = a.replace(/^v/, "").split(".").map(Number);
+            const pb = b.replace(/^v/, "").split(".").map(Number);
+            for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+                const na = pa[i] || 0;
+                const nb = pb[i] || 0;
+                if (na !== nb) return na - nb;
+            }
+            return 0;
+        });
+        return tags[tags.length - 1] || null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Checks whether a tag already exists and HEAD has progressed past it.
+ */
+function isTagAlreadyReleased(tag) {
+    try {
+        const tagSha = execSync(`git rev-parse -q --verify "refs/tags/${tag}^{commit}"`, { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+        const headSha = execSync("git rev-parse HEAD", { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+        return tagSha !== "" && tagSha !== headSha;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Finds the latest commit that modified addon code/assets for preview highlights.
+ */
+function getLatestAddonCommit() {
+    try {
+        const raw = execSync("git log -n 25 --pretty=format:'%H'", { encoding: "utf8" }).trim();
+        const hashes = raw.split("\n").filter(Boolean);
+        for (const h of hashes) {
+            if (isAddonCommit(h)) {
+                const subject = execSync(`git log -1 --pretty=%s ${h}`, { encoding: "utf8" }).trim();
+                const body = execSync(`git log -1 --pretty=%b ${h}`, { encoding: "utf8" }).trim();
+                const author = execSync(`git log -1 --pretty=%an ${h}`, { encoding: "utf8" }).trim();
+                return { hash: h, subject, body, author };
+            }
+        }
+    } catch {
+        // Fallback
+    }
+    return null;
+}
+
+/**
+ * Generates an addon-only release changelog from git history for main releases.
+ * Categorizes changes into Features, Fixes & Improvements, and Other Updates.
+ * Excludes all tools, scripts, CI/CD, templates, and documentation commits.
+ */
+function generateAddonChangelog(version, repo, prevTag) {
+    let commitLines = [];
+    try {
+        const range = prevTag ? `${prevTag}..HEAD` : "-n 50";
+        const rawCommits = execSync(`git log ${range} --pretty=format:'%s|%h|%H'`, { encoding: "utf8" }).trim();
+        if (rawCommits) {
+            commitLines = rawCommits.split("\n").filter(Boolean);
+        }
+    } catch {
+        // Fallback
+    }
+
+    const addonCommits = commitLines
+        .map((line) => {
+            const [subj, shortH, longH] = line.split("|");
+            return { subject: subj, shortHash: shortH, fullHash: longH };
+        })
+        .filter((c) => isAddonCommit(c.fullHash));
+
+    const features = addonCommits.filter((c) => /^feat(\(.*\))?:/i.test(c.subject));
+    const fixes = addonCommits.filter((c) => /^(fix|perf|refactor)(\(.*\))?:/i.test(c.subject));
+    const others = addonCommits.filter((c) => !features.includes(c) && !fixes.includes(c));
+
+    let content = `# Bedrock QoL Suite — v${version} Release Notes\n\n`;
+    content += `**Release Version:** \`v${version}\`  \n`;
+    content += `**Compatibility:** Minecraft Bedrock Edition 1.21.0+ (\`@minecraft/server\` 2.10.0, \`@minecraft/server-ui\` 2.2.0)\n\n`;
+    content += `---\n\n`;
+
+    if (features.length > 0) {
+        content += `### 🚀 New Features & Capabilities\n`;
+        content += features.map((c) => `* ${c.subject} ([\`${c.shortHash}\`](https://github.com/${repo}/commit/${c.fullHash}))`).join("\n") + "\n\n";
+    }
+
+    if (fixes.length > 0) {
+        content += `### 🐛 Fixes & Improvements\n`;
+        content += fixes.map((c) => `* ${c.subject} ([\`${c.shortHash}\`](https://github.com/${repo}/commit/${c.fullHash}))`).join("\n") + "\n\n";
+    }
+
+    if (others.length > 0) {
+        content += `### ⚡ Addon Updates\n`;
+        content += others.map((c) => `* ${c.subject} ([\`${c.shortHash}\`](https://github.com/${repo}/commit/${c.fullHash}))`).join("\n") + "\n\n";
+    }
+
+    if (addonCommits.length === 0) {
+        content += `### 📦 Release Notes\n`;
+        content += `Quality-of-life enhancements and performance updates for Minecraft Bedrock Edition.\n\n`;
+    }
+
+    content += `---\n`;
+    content += `*Download the \`.mcaddon\` bundle below to import directly into Minecraft Bedrock.*`;
+
+    return content;
+}
+
 function getMetadata() {
     const pkg = JSON.parse(readFileSync("package.json", "utf8"));
     const version = pkg.version || "1.0.0";
@@ -28,21 +184,10 @@ function getMetadata() {
 
         const notesPath = "prerelease_notes.md";
 
-        // 1. Get triggering commit subject, body, and author
-        let commitSubject = "";
-        let commitBody = "";
-        let commitAuthor = "";
-        let fullSha = "";
-        try {
-            commitSubject = execSync("git log -1 --pretty=%s", { encoding: "utf8" }).trim();
-            commitBody = execSync("git log -1 --pretty=%b", { encoding: "utf8" }).trim();
-            commitAuthor = execSync("git log -1 --pretty=%an", { encoding: "utf8" }).trim();
-            fullSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
-        } catch {
-            // Fallback
-        }
+        // 1. Get latest addon commit for highlight header and description
+        const latestAddon = getLatestAddonCommit();
 
-        // 2. Collect commit history on development ahead of main, or last 5 commits
+        // 2. Collect commit history on development ahead of main, or recent commits
         let commitLines = [];
         try {
             const rawCommits = execSync("git log origin/main..HEAD --pretty=format:'%s|%h|%H' 2>/dev/null || git log main..HEAD --pretty=format:'%s|%h|%H' 2>/dev/null", { encoding: "utf8" }).trim();
@@ -55,61 +200,46 @@ function getMetadata() {
 
         if (commitLines.length === 0) {
             try {
-                const rawCommits = execSync("git log -n 5 --pretty=format:'%s|%h|%H'", { encoding: "utf8" }).trim();
+                const rawCommits = execSync("git log -n 15 --pretty=format:'%s|%h|%H'", { encoding: "utf8" }).trim();
                 commitLines = rawCommits.split("\n").filter(Boolean);
             } catch {
                 // Fallback
             }
         }
 
-        let commitsMarkdown = "";
-        if (commitLines.length > 0) {
-            commitsMarkdown = commitLines.map((line) => {
+        // Filter to include only addon commits (no tools, ci, docs, templates)
+        const addonCommits = commitLines
+            .map((line) => {
                 const [subj, shortH, longH] = line.split("|");
-                if (shortH && longH) {
-                    return `* ${subj} ([\`${shortH}\`](https://github.com/${repo}/commit/${longH}))`;
-                }
-                return `* ${line}`;
-            }).join("\n");
+                return { subject: subj, shortHash: shortH, fullHash: longH };
+            })
+            .filter((c) => isAddonCommit(c.fullHash));
+
+        let commitsMarkdown = "";
+        if (addonCommits.length > 0) {
+            commitsMarkdown = addonCommits
+                .map((c) => `* ${c.subject} ([\`${c.shortHash}\`](https://github.com/${repo}/commit/${c.fullHash}))`)
+                .join("\n");
         }
 
-        // 3. Collect modified addon files in this build
-        let changedFilesMarkdown = "";
-        try {
-            const diffOutput = execSync("git diff --name-only HEAD~1 HEAD", { encoding: "utf8" }).trim();
-            const addonFiles = diffOutput.split("\n")
-                .map((f) => f.trim())
-                .filter((f) => f.startsWith("src/") || f.startsWith("behavior_pack/") || f.startsWith("resource_pack/"));
-            if (addonFiles.length > 0) {
-                changedFilesMarkdown = addonFiles.map((f) => `* \`${f}\``).join("\n");
-            }
-        } catch {
-            // Fallback
-        }
-
-        // 4. Build comprehensive, human-like prerelease notes
+        // 3. Build comprehensive prerelease notes strictly for addon changes
         let notesContent = `### ⚠️ Development Preview Build (${tag})\n\n`;
 
-        if (commitSubject) {
-            notesContent += `#### 🚀 Latest Addition: **${commitSubject}**\n\n`;
-        }
-
-        if (commitBody) {
-            notesContent += `**Description & Details:**\n\n${commitBody}\n\n`;
+        if (latestAddon) {
+            notesContent += `#### 🚀 Latest Addon Feature: **${latestAddon.subject}**\n\n`;
+            if (latestAddon.body) {
+                notesContent += `**Description & Details:**\n\n${latestAddon.body}\n\n`;
+            }
         }
 
         if (commitsMarkdown) {
-            notesContent += `#### 📋 Included in this Preview Build:\n${commitsMarkdown}\n\n`;
-        }
-
-        if (changedFilesMarkdown) {
-            notesContent += `#### 🛠️ Modified Addon Components:\n${changedFilesMarkdown}\n\n`;
+            notesContent += `#### 📋 Included Addon Features in this Preview Build:\n${commitsMarkdown}\n\n`;
         }
 
         notesContent += `#### ℹ️ Build Information\n` +
             `- **Branch:** \`${refName}\`\n` +
-            `- **Commit:** [\`${sha || "HEAD"}\`](https://github.com/${repo}/commit/${fullSha || sha})\n` +
-            `- **Author:** \`${commitAuthor || "developer"}\`\n` +
+            `- **Commit:** [\`${sha || "HEAD"}\`](https://github.com/${repo}/commit/${process.env.GITHUB_SHA || getCurrentCommitSha()})\n` +
+            `- **Author:** \`${latestAddon?.author || "developer"}\`\n` +
             `- **Build:** \`#${runNumber}\`\n\n` +
             `*Download the attached \`.mcaddon\` file below to install and test directly in Minecraft Bedrock (1.21+).*`;
 
@@ -122,11 +252,15 @@ function getMetadata() {
         makeLatest = "true";
 
         const versionChangelog = `update/v${version}.md`;
-        if (existsSync(versionChangelog)) {
+        // Use custom update/v<version>.md if it exists AND is not an older already-tagged release
+        if (existsSync(versionChangelog) && !isTagAlreadyReleased(tag)) {
             changelogFile = versionChangelog;
         } else {
+            // Generate clean, addon-only release changelog from git history
+            const prevTag = getPreviousStableTag(tag);
+            const notes = generateAddonChangelog(version, repo, prevTag);
             const fallbackPath = "release_notes.md";
-            writeFileSync(fallbackPath, `### Release v${version}\n\nSee release history in the \`update/\` directory.\n`, "utf8");
+            writeFileSync(fallbackPath, notes, "utf8");
             changelogFile = fallbackPath;
         }
     }
