@@ -104,22 +104,17 @@ function getMinEngineVersion() {
 }
 
 /**
- * Fetches game version IDs from CurseForge API matching Bedrock Edition and engine version.
+ * Helper to query game versions from a CurseForge endpoint.
+ * When isBedrockDefault is false, requires an explicit Bedrock version-type match
+ * to prevent Java Minecraft versions from being falsely matched.
  */
-async function fetchCurseForgeGameVersions(apiKey, targetEngineVersion) {
-    const headers = {
-        "X-Api-Token": apiKey,
-        "x-api-key": apiKey,
-        "Accept": "application/json",
-    };
-
+async function queryEndpointVersions(baseUrl, headers, targetEngineVersion, isBedrockDefault) {
+    let bedrockTypeIds = new Set();
     try {
-        // 1. Fetch version types to identify Bedrock version type ID
-        let bedrockTypeIds = new Set();
-        try {
-            const typeRes = await fetch("https://minecraft.curseforge.com/api/game/version-types", { headers });
-            if (typeRes.ok) {
-                const types = await typeRes.json();
+        const typeRes = await fetch(`${baseUrl}/api/game/version-types`, { headers });
+        if (typeRes.ok) {
+            const types = await typeRes.json();
+            if (Array.isArray(types)) {
                 for (const t of types) {
                     const name = (t.name || "").toLowerCase();
                     const slug = (t.slug || "").toLowerCase();
@@ -128,28 +123,33 @@ async function fetchCurseForgeGameVersions(apiKey, targetEngineVersion) {
                     }
                 }
             }
-        } catch {
-            // Continue with fallback matching
         }
+    } catch {
+        // Silently continue
+    }
 
-        // 2. Fetch all game versions
-        const verRes = await fetch("https://minecraft.curseforge.com/api/game/versions", { headers });
-        if (!verRes.ok) {
-            console.warn(`[CurseForge] Warning: Failed to query game versions (HTTP ${verRes.status}).`);
-            return [];
-        }
+    // If this endpoint is not a dedicated Bedrock subdomain and has no Bedrock types,
+    // it hosts Java versions only. Do not match any versions from it.
+    if (!isBedrockDefault && bedrockTypeIds.size === 0) {
+        return [];
+    }
+
+    try {
+        const verRes = await fetch(`${baseUrl}/api/game/versions`, { headers });
+        if (!verRes.ok) return [];
 
         const allVersions = await verRes.json();
-        const matchedIds = [];
+        if (!Array.isArray(allVersions)) return [];
 
+        const matchedIds = [];
         const majorMinor = targetEngineVersion.split(".").slice(0, 2).join("."); // e.g. "1.21"
 
         for (const v of allVersions) {
             const vName = v.name || "";
             const vSlug = v.slug || "";
-            const isBedrockType = bedrockTypeIds.size === 0 || bedrockTypeIds.has(v.gameVersionTypeID);
+            const isBedrockType = isBedrockDefault || bedrockTypeIds.has(v.gameVersionTypeID);
+            if (!isBedrockType) continue;
 
-            // Match exact engine version or major.minor (e.g. 1.21.0 or 1.21)
             const matchesVersion =
                 vName === targetEngineVersion ||
                 vName === majorMinor ||
@@ -157,28 +157,122 @@ async function fetchCurseForgeGameVersions(apiKey, targetEngineVersion) {
                 vSlug === majorMinor.replace(/\./g, "-") ||
                 vName.startsWith(majorMinor);
 
-            if (isBedrockType && matchesVersion) {
+            if (matchesVersion && typeof v.id === "number") {
                 matchedIds.push(v.id);
-            }
-        }
-
-        if (matchedIds.length > 0) {
-            console.log(`[CurseForge] Matched ${matchedIds.length} game version ID(s) for Minecraft Bedrock ${targetEngineVersion}: [${matchedIds.join(", ")}]`);
-            return matchedIds;
-        }
-
-        // Fallback: match any Bedrock version if available
-        for (const v of allVersions) {
-            if (bedrockTypeIds.has(v.gameVersionTypeID)) {
-                matchedIds.push(v.id);
-                if (matchedIds.length >= 3) break;
             }
         }
 
         return matchedIds;
-    } catch (err) {
-        console.warn("[CurseForge] Warning: Could not fetch game versions from API:", err.message);
+    } catch {
         return [];
+    }
+}
+
+/**
+ * Fetches game version IDs from CurseForge API matching Bedrock Edition and engine version.
+ * Strictly guarantees that Java Edition version IDs are never returned.
+ */
+async function fetchCurseForgeGameVersions(apiKey, targetEngineVersion) {
+    const headers = {
+        "X-Api-Token": apiKey,
+        "x-api-key": apiKey,
+        "Accept": "application/json",
+    };
+
+    const majorMinor = targetEngineVersion.split(".").slice(0, 2).join("."); // e.g. "1.21"
+
+    // 1. Try dedicated Bedrock endpoint: https://bedrock.curseforge.com
+    try {
+        const bedrockVersions = await queryEndpointVersions("https://bedrock.curseforge.com", headers, targetEngineVersion, true);
+        if (bedrockVersions.length > 0) {
+            console.log(`[CurseForge] Matched ${bedrockVersions.length} game version ID(s) from bedrock.curseforge.com for ${targetEngineVersion}: [${bedrockVersions.join(", ")}]`);
+            return bedrockVersions;
+        }
+    } catch {
+        // Continue to next strategy
+    }
+
+    // 2. Try CurseForge Core API for Bedrock (Game ID: 78022)
+    try {
+        const coreRes = await fetch("https://api.curseforge.com/v1/games/78022/versions", { headers });
+        if (coreRes.ok) {
+            const json = await coreRes.json();
+            const versions = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
+            const matchedIds = [];
+            for (const v of versions) {
+                const vName = v.name || "";
+                const vSlug = v.slug || "";
+                const matches =
+                    vName === targetEngineVersion ||
+                    vName === majorMinor ||
+                    vSlug === targetEngineVersion.replace(/\./g, "-") ||
+                    vSlug === majorMinor.replace(/\./g, "-") ||
+                    vName.startsWith(majorMinor);
+                if (matches && typeof v.id === "number") {
+                    matchedIds.push(v.id);
+                }
+            }
+            if (matchedIds.length > 0) {
+                console.log(`[CurseForge] Matched ${matchedIds.length} game version ID(s) from Core API (78022) for ${targetEngineVersion}: [${matchedIds.join(", ")}]`);
+                return matchedIds;
+            }
+        }
+    } catch {
+        // Continue to next strategy
+    }
+
+    // 3. Try https://minecraft.curseforge.com ONLY if Bedrock version types are explicitly identified
+    try {
+        const mcVersions = await queryEndpointVersions("https://minecraft.curseforge.com", headers, targetEngineVersion, false);
+        if (mcVersions.length > 0) {
+            console.log(`[CurseForge] Matched ${mcVersions.length} verified Bedrock game version ID(s) for ${targetEngineVersion}: [${mcVersions.join(", ")}]`);
+            return mcVersions;
+        }
+    } catch {
+        // Continue
+    }
+
+    console.log(`[CurseForge] Note: No verified Bedrock version IDs found on CurseForge API. Omitting gameVersions tag to prevent Error 1008.`);
+    return [];
+}
+
+/**
+ * Uploads file with given metadata to a CurseForge endpoint.
+ */
+async function uploadToCurseForge(url, apiKey, addonFile, metadata) {
+    const fileBytes = readFileSync(addonFile);
+    const fileBlob = new Blob([fileBytes], { type: "application/octet-stream" });
+
+    const form = new FormData();
+    form.append("file", fileBlob, basename(addonFile));
+    form.append("metadata", JSON.stringify(metadata));
+
+    return await fetch(url, {
+        method: "POST",
+        headers: {
+            "X-Api-Token": apiKey,
+            "x-api-key": apiKey,
+            "Accept": "application/json",
+        },
+        body: form,
+    });
+}
+
+/**
+ * Handles post-upload success logging and output variable registration.
+ */
+function handleSuccess(data, projectId) {
+    console.log("=================================================");
+    console.log(`[CurseForge] SUCCESS! Published file ID: ${data.id}`);
+    console.log(`[CurseForge] View project: https://www.curseforge.com/projects/${projectId}`);
+    console.log("=================================================");
+
+    const ghOutput = process.env.GITHUB_OUTPUT;
+    if (ghOutput && existsSync(ghOutput)) {
+        try {
+            const out = `curseforge_file_id=${data.id}\n`;
+            writeFileSync(ghOutput, out, { flag: "a" });
+        } catch {}
     }
 }
 
@@ -260,51 +354,75 @@ async function main() {
         metadata.gameVersions = gameVersionIds;
     }
 
-    console.log(`[CurseForge] Uploading to https://minecraft.curseforge.com/api/projects/${projectId}/upload-file ...`);
+    // Determine upload endpoints to attempt
+    let uploadEndpoints = [];
+    if (process.env.CURSEFORGE_UPLOAD_URL) {
+        uploadEndpoints.push(process.env.CURSEFORGE_UPLOAD_URL);
+    } else if (process.env.CURSEFORGE_ENDPOINT) {
+        uploadEndpoints.push(`https://${process.env.CURSEFORGE_ENDPOINT}.curseforge.com/api/projects/${projectId}/upload-file`);
+        uploadEndpoints.push(`https://minecraft.curseforge.com/api/projects/${projectId}/upload-file`);
+    } else {
+        uploadEndpoints.push(`https://minecraft.curseforge.com/api/projects/${projectId}/upload-file`);
+        uploadEndpoints.push(`https://bedrock.curseforge.com/api/projects/${projectId}/upload-file`);
+    }
 
-    try {
-        const fileBytes = readFileSync(addonFile);
-        const fileBlob = new Blob([fileBytes], { type: "application/octet-stream" });
+    let uploadSucceeded = false;
 
-        const form = new FormData();
-        form.append("file", fileBlob, basename(addonFile));
-        form.append("metadata", JSON.stringify(metadata));
+    for (let i = 0; i < uploadEndpoints.length; i++) {
+        const uploadUrl = uploadEndpoints[i];
+        console.log(`[CurseForge] Uploading to ${uploadUrl} ...`);
 
-        const response = await fetch(`https://minecraft.curseforge.com/api/projects/${projectId}/upload-file`, {
-            method: "POST",
-            headers: {
-                "X-Api-Token": apiKey,
-                "x-api-key": apiKey,
-                "Accept": "application/json",
-            },
-            body: form,
-        });
+        try {
+            let response = await uploadToCurseForge(uploadUrl, apiKey, addonFile, metadata);
 
-        if (response.ok) {
-            const data = await response.json();
-            console.log("=================================================");
-            console.log(`[CurseForge] SUCCESS! Published file ID: ${data.id}`);
-            console.log(`[CurseForge] View project: https://www.curseforge.com/projects/${projectId}`);
-            console.log("=================================================");
+            if (!response.ok) {
+                const errBody = await response.text();
 
-            const ghOutput = process.env.GITHUB_OUTPUT;
-            if (ghOutput && existsSync(ghOutput)) {
-                try {
-                    const out = `curseforge_file_id=${data.id}\n`;
-                    writeFileSync(ghOutput, out, { flag: "a" });
-                } catch {}
+                // If error is 1008 (Invalid game version ID), retry without gameVersions
+                const isInvalidGameVersionErr =
+                    response.status === 400 &&
+                    (errBody.includes("1008") ||
+                     errBody.includes("belongs to an invalid game") ||
+                     errBody.includes("Invalid game version ID"));
+
+                if (isInvalidGameVersionErr && metadata.gameVersions && metadata.gameVersions.length > 0) {
+                    console.warn(`[CurseForge] Server rejected game version IDs (${errBody.trim()}).`);
+                    console.log(`[CurseForge] Retrying upload without gameVersions tag...`);
+                    const retryMeta = { ...metadata };
+                    delete retryMeta.gameVersions;
+
+                    response = await uploadToCurseForge(uploadUrl, apiKey, addonFile, retryMeta);
+                    if (response.ok) {
+                        const data = await response.json();
+                        handleSuccess(data, projectId);
+                        uploadSucceeded = true;
+                        break;
+                    } else {
+                        const retryErr = await response.text();
+                        console.error(`[CurseForge] Retry upload failed (HTTP ${response.status}): ${retryErr}`);
+                    }
+                } else if (response.status === 404 && i + 1 < uploadEndpoints.length) {
+                    console.warn(`[CurseForge] Endpoint ${uploadUrl} returned 404. Trying fallback endpoint...`);
+                    continue;
+                } else {
+                    console.error(`[CurseForge] Upload failed (HTTP ${response.status}): ${errBody}`);
+                }
+            } else {
+                const data = await response.json();
+                handleSuccess(data, projectId);
+                uploadSucceeded = true;
+                break;
             }
-            process.exit(0);
-        } else {
-            const errBody = await response.text();
-            console.error(`[CurseForge] Upload failed (HTTP ${response.status}): ${errBody}`);
-            if (process.env.CURSEFORGE_STRICT === "true") {
-                process.exit(1);
+        } catch (err) {
+            console.error(`[CurseForge] Network error during upload to ${uploadUrl}:`, err.message);
+            if (i + 1 < uploadEndpoints.length) {
+                console.log("[CurseForge] Trying fallback endpoint...");
+                continue;
             }
-            process.exit(0);
         }
-    } catch (err) {
-        console.error(`[CurseForge] Error during upload:`, err.message);
+    }
+
+    if (!uploadSucceeded) {
         if (process.env.CURSEFORGE_STRICT === "true") {
             process.exit(1);
         }
