@@ -108,6 +108,7 @@ export const TreeCapitatorConfig = {
     autoPlantSapling: {
         /**
          * Automatically plant a matching sapling in an optimal growing spot when a tree is felled.
+         * Note: Fallen logs / downed trunks without leaves will not plant saplings since they drop no saplings.
          * Default: true
          */
         enabled: true,

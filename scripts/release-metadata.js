@@ -249,9 +249,12 @@ function determineReleaseChannel(commits, refName) {
         if (explicit === "alpha" || explicit === "beta") return explicit;
     }
 
-    if (Array.isArray(commits) && commits.length > 0) {
-        const hasFeature = commits.some((c) => isFeatureOrExperimental(c.subject));
-        if (hasFeature) return "alpha";
+    // Inspect the head/triggering commit for this build:
+    // If the latest commit is a feature or experimental -> Alpha
+    // If it's a bug fix, refactor, maintenance, etc. -> Beta
+    const headCommit = Array.isArray(commits) && commits.length > 0 ? commits[0] : null;
+    if (headCommit && headCommit.subject) {
+        return isFeatureOrExperimental(headCommit.subject) ? "alpha" : "beta";
     }
 
     try {

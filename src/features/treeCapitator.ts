@@ -657,8 +657,6 @@ export function handleTreeBreak(event: PlayerBreakBlockAfterEvent): void {
         if (hasLeaves) {
             triggerFastLeafDecay(dimension, connectedLeaves, visitedLogs, logTypeId);
             autoPlantSaplings(dimension, logTypeId, startPos, false);
-        } else if (isFallenLog && TreeCapitatorConfig.autoPlantSapling.enabled) {
-            autoPlantSaplings(dimension, logTypeId, startPos, false);
         }
         return;
     }
@@ -696,8 +694,8 @@ export function handleTreeBreak(event: PlayerBreakBlockAfterEvent): void {
         }
         if (hasLeaves) {
             triggerFastLeafDecay(dimension, connectedLeaves, visitedLogs, logTypeId);
+            autoPlantSaplings(dimension, logTypeId, treeBasePos, is2x2);
         }
-        autoPlantSaplings(dimension, logTypeId, treeBasePos, is2x2);
     } else {
         // Smooth animated felling over multiple ticks
         let index = 0;
@@ -721,8 +719,8 @@ export function handleTreeBreak(event: PlayerBreakBlockAfterEvent): void {
                 // Trigger fast leaf decay and sapling auto-planting once trunk is felled
                 if (hasLeaves) {
                     triggerFastLeafDecay(dimension, connectedLeaves, visitedLogs, logTypeId);
+                    autoPlantSaplings(dimension, logTypeId, treeBasePos, is2x2);
                 }
-                autoPlantSaplings(dimension, logTypeId, treeBasePos, is2x2);
             }
         }, 1);
     }
