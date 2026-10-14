@@ -298,7 +298,18 @@ export interface FoodLocation {
     food: FoodItemInfo;
 }
 
-// Map tracking last tick when a player auto-ate to enforce eating cooldowns
+interface ActiveEatingSession {
+    foodLoc: FoodLocation;
+    startTick: number;
+    totalTicks: number;
+    intervalId: number;
+    isEmergency: boolean;
+}
+
+// Active eating sessions undergoing progressive consumption
+const activeEatingSessions = new Map<string, ActiveEatingSession>();
+
+// Map tracking last tick when a player completed auto-eating to enforce cooldowns
 const lastEatTicks = new Map<string, number>();
 
 /**
@@ -307,6 +318,76 @@ const lastEatTicks = new Map<string, number>();
  */
 function getFoodScore(food: FoodItemInfo): number {
     return food.nutrition * 2 + food.saturation;
+}
+
+/**
+ * Renders a visual progress bar for HUD display.
+ */
+function renderProgressBar(current: number, total: number): string {
+    const barLength = 8;
+    const filled = Math.min(barLength, Math.max(0, Math.round((current / total) * barLength)));
+    const empty = barLength - filled;
+    return `§e[§a${"■".repeat(filled)}§7${"□".repeat(empty)}§e]§r`;
+}
+
+/**
+ * Triggers the vanilla humanoid eating pose / arm raise animation.
+ */
+function triggerArmEatingAnimation(player: Player): void {
+    if (!AutoEatConfig.playArmAnimation) return;
+    try {
+        player.playAnimation("animation.humanoid.holding_brush", { blendOutTime: 0.2 });
+    } catch {
+        try {
+            player.playAnimation("animation.humanoid.tooting_goat_horn", { blendOutTime: 0.2 });
+        } catch {
+            // Fallback
+        }
+    }
+}
+
+/**
+ * Verifies whether the targeted food item is still available at its original location.
+ */
+function verifyFoodAvailable(player: Player, foodLoc: FoodLocation): boolean {
+    try {
+        if (foodLoc.location === "offhand") {
+            const equippable = player.getComponent(EntityComponentTypes.Equippable);
+            const offhand = equippable?.getEquipment(EquipmentSlot.Offhand);
+            return offhand?.typeId === foodLoc.food.id && offhand.amount > 0;
+        } else if (foodLoc.location === "inventory" && foodLoc.slotIndex !== undefined) {
+            const invComp = player.getComponent(EntityComponentTypes.Inventory);
+            const item = invComp?.container?.getItem(foodLoc.slotIndex);
+            return item?.typeId === foodLoc.food.id && item.amount > 0;
+        }
+    } catch {
+        // Fallback
+    }
+    return false;
+}
+
+/**
+ * Cancels an active eating session, clears intervals, and removes movement slowdown.
+ */
+export function cancelEatingSession(player: Player): void {
+    const session = activeEatingSessions.get(player.id);
+    if (!session) return;
+
+    try {
+        system.clearRun(session.intervalId);
+    } catch {
+        // Ignore
+    }
+
+    activeEatingSessions.delete(player.id);
+
+    try {
+        if (player.isValid && AutoEatConfig.applyEatingSlowdown) {
+            player.removeEffect("slowness");
+        }
+    } catch {
+        // Ignore
+    }
 }
 
 /**
@@ -526,23 +607,7 @@ export function consumeFood(player: Player, foodLoc: FoodLocation): void {
         // 6. Sound effects
         if (AutoEatConfig.playSounds) {
             try {
-                player.dimension.playSound("random.eat", player.location, {
-                    volume: 0.8,
-                    pitch: 0.95 + Math.random() * 0.1,
-                });
-
-                const hunger = player.getComponent("minecraft:player.hunger") as EntityHungerComponent | undefined;
-                if (hunger && hunger.currentValue >= 20) {
-                    system.runTimeout(() => {
-                        try {
-                            if (player.isValid) {
-                                player.dimension.playSound("random.burp", player.location, { volume: 0.8, pitch: 1.0 });
-                            }
-                        } catch {
-                            // Ignore
-                        }
-                    }, 4);
-                }
+                player.dimension.playSound("random.burp", player.location, { volume: 0.8, pitch: 1.0 });
             } catch {
                 // Ignore
             }
@@ -564,7 +629,7 @@ export function consumeFood(player: Player, foodLoc: FoodLocation): void {
 
         // 8. Notification HUD
         if (AutoEatConfig.showNotification) {
-            showPlayerNotification(player, `§e🍖 Auto-Ate ${food.name}§r`);
+            showPlayerNotification(player, `§a✔ Finished Eating ${food.name}!§r`);
         }
 
         // Record cooldown
@@ -575,7 +640,156 @@ export function consumeFood(player: Player, foodLoc: FoodLocation): void {
 }
 
 /**
- * Evaluates whether a player should auto-eat and executes consumption if eligible.
+ * Initiates a realistic, vanilla-paced eating session with progressive chewing,
+ * visual arm animation, particles, sounds, and movement balancing.
+ */
+export function startEatingSession(player: Player, foodLoc: FoodLocation, isEmergency: boolean): void {
+    if (activeEatingSessions.has(player.id)) return;
+
+    const totalTicks = Math.max(4, AutoEatConfig.eatDurationTicks);
+    const startTick = system.currentTick;
+    let elapsedTicks = 0;
+
+    // Apply movement slowdown for the duration of eating (balancing against sprinting)
+    if (AutoEatConfig.applyEatingSlowdown) {
+        try {
+            player.addEffect("slowness", totalTicks + 6, {
+                amplifier: AutoEatConfig.slowdownAmplifier,
+                showParticles: false,
+            });
+        } catch {
+            // Ignore
+        }
+    }
+
+    // Trigger initial arm eating animation
+    triggerArmEatingAnimation(player);
+
+    // Initial crunch sound & particles
+    if (AutoEatConfig.playSounds) {
+        try {
+            player.dimension.playSound("random.eat", player.location, {
+                volume: 0.8,
+                pitch: 0.95 + Math.random() * 0.1,
+            });
+        } catch {
+            // Ignore
+        }
+    }
+
+    if (AutoEatConfig.showParticles) {
+        try {
+            const loc = player.location;
+            player.dimension.spawnParticle("minecraft:crop_growth_emitter", {
+                x: loc.x,
+                y: loc.y + 1.2,
+                z: loc.z,
+            });
+        } catch {
+            // Ignore
+        }
+    }
+
+    // Display initial HUD progress bar
+    if (AutoEatConfig.showProgressBar) {
+        showPlayerNotification(player, `§e🍖 Eating ${foodLoc.food.name}... ${renderProgressBar(0, totalTicks)}§r`, 400);
+    }
+
+    // Progressive chewing loop running every 4 ticks
+    const intervalId = system.runInterval(() => {
+        elapsedTicks += 4;
+
+        // 1. Validate player existence and validity
+        if (!player || !player.isValid) {
+            system.clearRun(intervalId);
+            activeEatingSessions.delete(player.id);
+            return;
+        }
+
+        // 2. Validate game mode
+        try {
+            const gm = player.getGameMode();
+            if (gm === GameMode.Creative || gm === GameMode.Spectator) {
+                cancelEatingSession(player);
+                return;
+            }
+        } catch {
+            // Ignore
+        }
+
+        // 3. Validate food item is still available
+        if (!verifyFoodAvailable(player, foodLoc)) {
+            cancelEatingSession(player);
+            return;
+        }
+
+        // 4. In-progress chewing step
+        if (elapsedTicks < totalTicks) {
+            if (AutoEatConfig.playSounds) {
+                try {
+                    player.dimension.playSound("random.eat", player.location, {
+                        volume: 0.8,
+                        pitch: 0.95 + Math.random() * 0.1,
+                    });
+                } catch {
+                    // Ignore
+                }
+            }
+
+            if (AutoEatConfig.showParticles) {
+                try {
+                    const loc = player.location;
+                    player.dimension.spawnParticle("minecraft:crop_growth_emitter", {
+                        x: loc.x,
+                        y: loc.y + 1.2,
+                        z: loc.z,
+                    });
+                } catch {
+                    // Ignore
+                }
+            }
+
+            if (elapsedTicks % 8 === 0) {
+                triggerArmEatingAnimation(player);
+            }
+
+            if (AutoEatConfig.showProgressBar) {
+                showPlayerNotification(
+                    player,
+                    `§e🍖 Eating ${foodLoc.food.name}... ${renderProgressBar(elapsedTicks, totalTicks)}§r`,
+                    300
+                );
+            }
+        } else {
+            // 5. Eating finished: consume food, restore hunger, and clean up
+            system.clearRun(intervalId);
+            activeEatingSessions.delete(player.id);
+
+            // Remove movement slowdown
+            try {
+                if (AutoEatConfig.applyEatingSlowdown) {
+                    player.removeEffect("slowness");
+                }
+            } catch {
+                // Ignore
+            }
+
+            // Finalize food consumption
+            consumeFood(player, foodLoc);
+        }
+    }, 4);
+
+    activeEatingSessions.set(player.id, {
+        foodLoc,
+        startTick,
+        totalTicks,
+        intervalId,
+        isEmergency,
+    });
+}
+
+/**
+ * Evaluates whether a player should auto-eat and initiates a progressive eating session if eligible.
  */
 export function tryAutoEat(player: Player, isEmergency: boolean = false): boolean {
     if (!AutoEatConfig.enabled) return false;
@@ -589,7 +803,12 @@ export function tryAutoEat(player: Player, isEmergency: boolean = false): boolea
         // Fallback
     }
 
-    // Cooldown check (matches vanilla eating duration)
+    // Check if player is already in an active eating session
+    if (activeEatingSessions.has(player.id)) {
+        return false;
+    }
+
+    // Cooldown check (matches configured delay between bites)
     const lastTick = lastEatTicks.get(player.id) ?? -999;
     if (system.currentTick - lastTick < AutoEatConfig.eatDelayTicks) {
         return false;
@@ -634,7 +853,7 @@ export function tryAutoEat(player: Player, isEmergency: boolean = false): boolea
     const foodLoc = findBestFood(player, emergency);
     if (!foodLoc) return false;
 
-    consumeFood(player, foodLoc);
+    startEatingSession(player, foodLoc, emergency);
     return true;
 }
 
@@ -668,8 +887,19 @@ export function initAutoEatFeature(): void {
         }
     });
 
-    // 3. Clean up player tracking on leave
+    // 3. Clean up active eating sessions and tracking on death, spawn, and leave
+    world.afterEvents.entityDie.subscribe((event) => {
+        if (event.deadEntity.typeId === "minecraft:player") {
+            cancelEatingSession(event.deadEntity as Player);
+        }
+    });
+
+    world.afterEvents.playerSpawn.subscribe((event) => {
+        cancelEatingSession(event.player);
+    });
+
     world.beforeEvents.playerLeave.subscribe((event) => {
+        cancelEatingSession(event.player);
         lastEatTicks.delete(event.player.id);
     });
 }

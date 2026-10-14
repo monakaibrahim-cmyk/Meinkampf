@@ -1608,6 +1608,38 @@ export const AutoEatConfig = {
     eatDelayTicks: 32,
 
     /**
+     * Duration in game ticks required to eat food (32 ticks = 1.6 seconds).
+     * Matches standard vanilla Minecraft eating duration for fair survival balancing.
+     * Default: 32 ticks (1.6s)
+     */
+    eatDurationTicks: 32,
+
+    /**
+     * Apply realistic movement speed reduction while eating.
+     * In vanilla Minecraft, player movement is slowed while consuming food.
+     * Default: true
+     */
+    applyEatingSlowdown: true,
+
+    /**
+     * Movement slowdown amplifier while eating (0 = Slowness I, 1 = Slowness II, 2 = Slowness III, 3 = Slowness IV).
+     * Default: 2 (~30% movement speed reduction, matching vanilla eating pace)
+     */
+    slowdownAmplifier: 2,
+
+    /**
+     * Play vanilla humanoid arm eating animation (hand raised to mouth) while chewing.
+     * Default: true
+     */
+    playArmAnimation: true,
+
+    /**
+     * Display a live eating progress bar on the Action Bar HUD during the 1.6s eating cycle.
+     * Default: true
+     */
+    showProgressBar: true,
+
+    /**
      * Allow eating food held in the offhand slot first.
      * Default: true
      */
@@ -1661,6 +1693,7 @@ export const AutoEatConfig = {
      */
     showNotification: true,
 };
+
 
 
 
