@@ -1564,5 +1564,104 @@ export const SilkTouchSpawnerConfig = {
     playSounds: true,
 };
 
+export const AutoEatConfig = {
+    /**
+     * Enable Auto Eat feature.
+     * Automatically consumes food from offhand, hotbar, or inventory when hunger drops or during emergencies.
+     * Default: true
+     */
+    enabled: true,
+
+    /**
+     * Hunger threshold (0 to 20) to trigger auto-eating.
+     * When current hunger drops to or below this value, the player will eat.
+     * Default: 14 (7 hunger drumsticks; allows sprinting and maintains natural healing buffer)
+     */
+    hungerThreshold: 14,
+
+    /**
+     * Target hunger level when player is injured/taking damage.
+     * In vanilla Minecraft, natural health regeneration requires hunger >= 18.
+     * When injured, Auto-Eat keeps hunger at or above this level to ensure constant healing.
+     * Default: 18 (9 hunger drumsticks)
+     */
+    injuredHungerThreshold: 18,
+
+    /**
+     * Automatically eat Golden Apples or Enchanted Golden Apples during critical emergencies,
+     * even if the player's hunger bar is completely full.
+     * Default: true
+     */
+    emergencyGoldenApple: true,
+
+    /**
+     * Health threshold (in hearts * 2, e.g. 8 = 4 hearts) to trigger emergency Golden Apple consumption.
+     * Default: 8
+     */
+    emergencyHealthThreshold: 8,
+
+    /**
+     * Minimum delay in game ticks between auto-eat bites (20 ticks = 1 second).
+     * Vanilla Minecraft eating duration is 32 ticks (1.6s).
+     * Default: 32 ticks (1.6s)
+     */
+    eatDelayTicks: 32,
+
+    /**
+     * Allow eating food held in the offhand slot first.
+     * Default: true
+     */
+    searchOffhand: true,
+
+    /**
+     * Allow searching for food in the hotbar (slots 0-8).
+     * Default: true
+     */
+    searchHotbar: true,
+
+    /**
+     * Allow searching for food in the backpack / main inventory (slots 9-35).
+     * Default: true
+     */
+    searchBackpack: true,
+
+    /**
+     * Return empty bowls (from stews and soups) and glass bottles (from honey bottles) to player's inventory.
+     * Default: true
+     */
+    returnContainers: true,
+
+    /**
+     * Prevent auto-eating harmful foods (Rotten Flesh, Spider Eyes, Poisonous Potatoes, Pufferfish, Raw Chicken).
+     * Default: true (harmful foods are excluded)
+     */
+    excludeHarmfulFoods: true,
+
+    /**
+     * Prevent auto-eating Chorus Fruit to avoid accidental random teleportation.
+     * Default: true (Chorus Fruit is excluded)
+     */
+    excludeChorusFruit: true,
+
+    /**
+     * Play eating crunch and burp sound effects.
+     * Default: true
+     */
+    playSounds: true,
+
+    /**
+     * Display subtle eating particle effects around player.
+     * Default: true
+     */
+    showParticles: true,
+
+    /**
+     * Display a clean action bar notification when food is consumed.
+     * Default: true
+     */
+    showNotification: true,
+};
+
+
 
 
