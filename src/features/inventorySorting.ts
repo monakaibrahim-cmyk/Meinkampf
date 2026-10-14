@@ -29,6 +29,11 @@ interface SlotRef {
 // Track per-player hotbar protection setting in memory
 const playerHotbarProtected = new Map<string, boolean>();
 
+// Active form locks, debouncing, and block interact tracking to prevent stacked dialogs and HUD freezes
+const activeFormPlayers = new Set<string>();
+const playerLastFormOpenTime = new Map<string, number>();
+const playerLastBlockInteract = new Map<string, number>();
+
 const SORTER_ITEM_NAME = "§l§6⚡ Quick Sorter§r";
 
 /**
@@ -401,19 +406,38 @@ export function initInventorySortingFeature(): void {
     world.afterEvents.itemUse.subscribe((event) => {
         try {
             if (!InventorySortingConfig.useSorterItem) return;
-            if (isSorterItem(event.itemStack)) {
-                const player = event.source;
-                // Check if aiming at a container within reach
-                const hit = player.getBlockFromViewDirection({ maxDistance: 5 });
-                if (hit && hit.block && isContainerBlock(hit.block)) {
+            if (!isSorterItem(event.itemStack)) return;
+
+            const player = event.source;
+            if (!player || !player.isValid) return;
+
+            // If player recently clicked a block, ignore itemUse (block interaction takes precedence)
+            const lastBlockTime = playerLastBlockInteract.get(player.id) ?? 0;
+            if (Date.now() - lastBlockTime < 350) return;
+
+            // Check if player is directly targeting a block within reach:
+            // If aiming at any block within 4.5 blocks, this was a block click, NOT an air click!
+            let hit;
+            try {
+                hit = player.getBlockFromViewDirection({ maxDistance: 4.5 });
+            } catch {
+                // Ignore
+            }
+
+            if (hit && hit.block) {
+                // If aiming at a valid container, open container sorter
+                if (isContainerBlock(hit.block)) {
                     const connected = InventorySortingConfig.sortDoubleChestsTogether
                         ? getConnectedChests(hit.block)
                         : [hit.block];
                     openContainerSorterForm(player, connected);
-                } else {
-                    openBackpackSorterForm(player);
                 }
+                // If aiming at non-container block (leaves, dirt, stone, crafting table), DO NOTHING
+                return;
             }
+
+            // In thin air with no block in view: open backpack sorter form
+            openBackpackSorterForm(player);
         } catch {
             // Ignore
         }
@@ -445,26 +469,34 @@ export function initInventorySortingFeature(): void {
     // Handle block interaction (sorter item or empty hand)
     world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
         try {
+            // Only process the first interaction event per click (prevents multiple triggers)
+            if (!event.isFirstEvent) return;
+
             const player = event.player;
             const block = event.block;
+            if (!player || !player.isValid || !block || !block.isValid) return;
 
             const equippable = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
             const mainhandItem = equippable?.getEquipment(EquipmentSlot.Mainhand);
             const holdingSorter = isSorterItem(event.itemStack) || isSorterItem(mainhandItem);
 
-            // Holding the sorter item opens container/backpack sorter interface
+            // Record block interaction timestamp to suppress duplicate itemUse air events
+            if (holdingSorter) {
+                playerLastBlockInteract.set(player.id, Date.now());
+            }
+
+            // Holding the sorter item on a container opens container sorter interface
             if (InventorySortingConfig.useSorterItem && holdingSorter) {
-                event.cancel = true;
-                system.run(() => {
-                    if (isContainerBlock(block)) {
+                if (isContainerBlock(block)) {
+                    event.cancel = true;
+                    system.run(() => {
                         const connected = InventorySortingConfig.sortDoubleChestsTogether
                             ? getConnectedChests(block)
                             : [block];
                         openContainerSorterForm(player, connected);
-                    } else {
-                        openBackpackSorterForm(player);
-                    }
-                });
+                    });
+                }
+                // When interacting with non-container blocks (leaves, dirt, wood, doors), DO NOT open backpack form!
                 return;
             }
 
@@ -691,29 +723,47 @@ export function openBackpackSorterForm(player: Player): void {
 }
 
 /**
- * Reliably displays an ActionFormData even if the player was temporarily busy.
+ * Reliably displays an ActionFormData modal with single-instance lock and debounce.
+ * Completely prevents multiple stacked dialog windows and HUD freeze/crashes.
  */
 function showActionFormSafe(
     player: Player,
     form: ActionFormData,
-    onSelect: (selection: number) => void,
-    retries = 4
+    onSelect: (selection: number) => void
 ): void {
-    form.show(player).then((res: ActionFormResponse) => {
-        if (res.canceled) {
-            if (res.cancelationReason === FormCancelationReason.UserBusy && retries > 0) {
-                system.runTimeout(() => {
-                    showActionFormSafe(player, form, onSelect, retries - 1);
-                }, 3);
+    if (!player || !player.isValid) return;
+
+    // Prevent opening multiple forms simultaneously on the same player
+    if (activeFormPlayers.has(player.id)) {
+        return;
+    }
+
+    // Debounce rapid repeated form invocations (minimum 300ms interval)
+    const now = Date.now();
+    const lastOpen = playerLastFormOpenTime.get(player.id) ?? 0;
+    if (now - lastOpen < 300) {
+        return;
+    }
+
+    playerLastFormOpenTime.set(player.id, now);
+    activeFormPlayers.add(player.id);
+
+    form.show(player)
+        .then((res: ActionFormResponse) => {
+            activeFormPlayers.delete(player.id);
+
+            if (res.canceled) {
+                // Player closed or dismissed the form. Do NOT queue retries.
+                return;
             }
-            return;
-        }
-        if (res.selection !== undefined) {
-            onSelect(res.selection);
-        }
-    }).catch(() => {
-        // Ignore form errors
-    });
+
+            if (res.selection !== undefined) {
+                onSelect(res.selection);
+            }
+        })
+        .catch(() => {
+            activeFormPlayers.delete(player.id);
+        });
 }
 
 /**
