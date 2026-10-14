@@ -409,6 +409,13 @@ const SEE_THROUGH_BLOCKS = [
 ];
 
 /**
+ * Checks if wall-penetrating / phasing health bars are permitted.
+ */
+function isPhasingAllowed(): boolean {
+    return (MobHealthBarConfig as any).seeThroughWalls ?? MobHealthBarConfig.phaseThroughWalls ?? false;
+}
+
+/**
  * Checks if a block is solid and occludes visual line of sight.
  */
 export function isOccludingBlock(block: Block | undefined): boolean {
@@ -542,7 +549,7 @@ export function updateEntityHealthBar(entity: Entity): void {
 
         // Configure nameplate depth testing based on phaseThroughWalls
         try {
-            const depthTested = !MobHealthBarConfig.phaseThroughWalls;
+            const depthTested = !isPhasingAllowed();
             (entity as any).nameplateDepthTested = depthTested;
         } catch {
             // Graceful fallback for older platforms
@@ -579,8 +586,7 @@ export function initMobHealthBarFeature(): void {
     world.afterEvents.entitySpawn.subscribe((event) => {
         const spawned = event.entity;
         if (spawned && spawned.isValid && isEligibleMob(spawned)) {
-            const phaseThroughWalls = MobHealthBarConfig.phaseThroughWalls ?? false;
-            if (phaseThroughWalls) {
+            if (isPhasingAllowed()) {
                 updateEntityHealthBar(spawned);
             } else {
                 const players = Array.from(world.getAllPlayers());
@@ -601,8 +607,7 @@ export function initMobHealthBarFeature(): void {
     world.afterEvents.entityHurt.subscribe((event) => {
         const hurt = event.hurtEntity;
         if (hurt && hurt.isValid && isEligibleMob(hurt)) {
-            const phaseThroughWalls = MobHealthBarConfig.phaseThroughWalls ?? false;
-            if (phaseThroughWalls) {
+            if (isPhasingAllowed()) {
                 updateEntityHealthBar(hurt);
             } else {
                 const players = Array.from(world.getAllPlayers());
@@ -636,7 +641,7 @@ export function initMobHealthBarFeature(): void {
 
         const maxDist = MobHealthBarConfig.maxDisplayDistance;
         const processed = new Set<string>();
-        const phaseThroughWalls = MobHealthBarConfig.phaseThroughWalls ?? false;
+        const phaseAllowed = isPhasingAllowed();
 
         for (const player of players) {
             if (!player || !player.isValid) continue;
@@ -653,7 +658,7 @@ export function initMobHealthBarFeature(): void {
 
                     processed.add(entity.id);
 
-                    if (phaseThroughWalls) {
+                    if (phaseAllowed) {
                         // Mode 1: Phase through walls (X-ray / radar style)
                         updateEntityHealthBar(entity);
                     } else {

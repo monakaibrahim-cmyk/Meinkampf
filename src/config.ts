@@ -579,9 +579,9 @@ export const MobHealthBarConfig = {
 
     /**
      * WALL VISIBILITY & LINE-OF-SIGHT BEHAVIOR:
-     * Choose whether mob health bars phase through walls or only render when mobs are directly visible:
-     * - true (Phase Through Walls): Health bars render through solid blocks and walls (X-ray / radar style; easily spot mobs in caves and structures).
-     * - false (Line of Sight Only): Health bars only render when you can actually see the mob without obstruction (clean survival immersion; hidden behind solid walls).
+     * Control whether mob health bars phase through walls or only render when mobs are directly visible:
+     * - false (Balanced / Clean Immersion — Default): Disallows seeing through walls. Health bars only render when you have direct visual line-of-sight to the mob. Mobs in caves below, behind walls, or under floors are hidden to prevent overpowered X-ray radar.
+     * - true (Overpowered / Cave Radar): Allows health bars to phase through solid blocks, providing radar/X-ray awareness of all nearby mobs even through thick terrain.
      * Default: false
      */
     phaseThroughWalls: false,
