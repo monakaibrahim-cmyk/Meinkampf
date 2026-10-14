@@ -1,4 +1,5 @@
 import {
+    Block,
     Entity,
     EntityComponentTypes,
     EntityHealthComponent,
@@ -389,6 +390,109 @@ export function formatHpValue(currentHp: number, maxHp: number): string {
 }
 
 /**
+ * Set of block identifier substrings that do not block line-of-sight visibility.
+ */
+const SEE_THROUGH_BLOCKS = [
+    "glass",
+    "leaves",
+    "bars",
+    "fence",
+    "gate",
+    "scaffolding",
+    "ladder",
+    "banner",
+    "slime",
+    "honey_block",
+    "grindstone",
+    "lantern",
+    "chain",
+];
+
+/**
+ * Checks if a block is solid and occludes visual line of sight.
+ */
+export function isOccludingBlock(block: Block | undefined): boolean {
+    if (!block || !block.isValid) return false;
+    if (block.isAir || block.isLiquid) return false;
+
+    const id = block.typeId;
+    for (const sub of SEE_THROUGH_BLOCKS) {
+        if (id.includes(sub)) return false;
+    }
+    return true;
+}
+
+/**
+ * Checks if a player has direct visual line of sight to an entity.
+ */
+export function hasLineOfSight(player: Player, entity: Entity): boolean {
+    try {
+        if (!player || !player.isValid || !entity || !entity.isValid) return false;
+        if (player.dimension.id !== entity.dimension.id) return false;
+
+        const eyePos = player.getHeadLocation();
+        const entLoc = entity.location;
+
+        const targetPos = {
+            x: entLoc.x,
+            y: entLoc.y + 1.0,
+            z: entLoc.z,
+        };
+
+        const dx = targetPos.x - eyePos.x;
+        const dy = targetPos.y - eyePos.y;
+        const dz = targetPos.z - eyePos.z;
+        const dist = Math.hypot(dx, dy, dz);
+
+        // Immediate proximity is always considered visible
+        if (dist <= 1.5) return true;
+
+        const dir = {
+            x: dx / dist,
+            y: dy / dist,
+            z: dz / dist,
+        };
+
+        let currentStart = eyePos;
+        let remainingDist = Math.max(0.2, dist - 0.4);
+
+        while (remainingDist > 0.5) {
+            const hit = player.dimension.getBlockFromRay(currentStart, dir, {
+                maxDistance: remainingDist,
+                includeLiquidBlocks: false,
+                includePassableBlocks: false,
+            });
+
+            if (!hit) {
+                return true; // No solid obstruction along the path
+            }
+
+            if (!isOccludingBlock(hit.block)) {
+                // Transparent / see-through block (e.g. glass window, leaves, iron bars)
+                currentStart = {
+                    x: hit.faceLocation.x + dir.x * 0.15,
+                    y: hit.faceLocation.y + dir.y * 0.15,
+                    z: hit.faceLocation.z + dir.z * 0.15,
+                };
+                const traveled = Math.hypot(
+                    currentStart.x - eyePos.x,
+                    currentStart.y - eyePos.y,
+                    currentStart.z - eyePos.z
+                );
+                remainingDist = (dist - 0.4) - traveled;
+            } else {
+                // Hit a solid opaque block (stone, wood, cobblestone, etc.)
+                return false;
+            }
+        }
+
+        return true;
+    } catch {
+        return true; // Fallback to visible if raycast fails
+    }
+}
+
+/**
  * Updates an entity's floating nameTag with the modern segmented card design.
  */
 export function updateEntityHealthBar(entity: Entity): void {
@@ -435,8 +539,11 @@ export function updateEntityHealthBar(entity: Entity): void {
         } catch {
             // Fallback for earlier engine versions
         }
+
+        // Configure nameplate depth testing based on phaseThroughWalls
         try {
-            (entity as any).nameplateDepthTested = MobHealthBarConfig.nameplateDepthTested ?? false;
+            const depthTested = !MobHealthBarConfig.phaseThroughWalls;
+            (entity as any).nameplateDepthTested = depthTested;
         } catch {
             // Graceful fallback for older platforms
         }
@@ -472,15 +579,43 @@ export function initMobHealthBarFeature(): void {
     world.afterEvents.entitySpawn.subscribe((event) => {
         const spawned = event.entity;
         if (spawned && spawned.isValid && isEligibleMob(spawned)) {
-            updateEntityHealthBar(spawned);
+            const phaseThroughWalls = MobHealthBarConfig.phaseThroughWalls ?? false;
+            if (phaseThroughWalls) {
+                updateEntityHealthBar(spawned);
+            } else {
+                const players = Array.from(world.getAllPlayers());
+                const isVisible = players.some(
+                    (p) =>
+                        p.dimension.id === spawned.dimension.id &&
+                        Math.hypot(p.location.x - spawned.location.x, p.location.z - spawned.location.z) <= MobHealthBarConfig.maxDisplayDistance &&
+                        hasLineOfSight(p, spawned)
+                );
+                if (isVisible) {
+                    updateEntityHealthBar(spawned);
+                }
+            }
         }
     });
 
     // 2. Instant update on damage event (0-tick real-time responsiveness)
     world.afterEvents.entityHurt.subscribe((event) => {
         const hurt = event.hurtEntity;
-        if (hurt && hurt.isValid) {
-            updateEntityHealthBar(hurt);
+        if (hurt && hurt.isValid && isEligibleMob(hurt)) {
+            const phaseThroughWalls = MobHealthBarConfig.phaseThroughWalls ?? false;
+            if (phaseThroughWalls) {
+                updateEntityHealthBar(hurt);
+            } else {
+                const players = Array.from(world.getAllPlayers());
+                const isVisible = players.some(
+                    (p) =>
+                        p.dimension.id === hurt.dimension.id &&
+                        Math.hypot(p.location.x - hurt.location.x, p.location.z - hurt.location.z) <= MobHealthBarConfig.maxDisplayDistance &&
+                        hasLineOfSight(p, hurt)
+                );
+                if (isVisible) {
+                    updateEntityHealthBar(hurt);
+                }
+            }
         }
     });
 
@@ -494,13 +629,14 @@ export function initMobHealthBarFeature(): void {
         }
     });
 
-    // 4. Periodic scan around online players (scans 20-block sphere)
+    // 4. Periodic scan around online players (scans configurable sphere with line-of-sight check)
     system.runInterval(() => {
         const players = Array.from(world.getAllPlayers());
         if (players.length === 0) return;
 
         const maxDist = MobHealthBarConfig.maxDisplayDistance;
         const processed = new Set<string>();
+        const phaseThroughWalls = MobHealthBarConfig.phaseThroughWalls ?? false;
 
         for (const player of players) {
             if (!player || !player.isValid) continue;
@@ -513,10 +649,36 @@ export function initMobHealthBarFeature(): void {
 
                 for (const entity of nearbyEntities) {
                     if (processed.has(entity.id)) continue;
+                    if (!isEligibleMob(entity)) continue;
+
                     processed.add(entity.id);
 
-                    if (isEligibleMob(entity)) {
+                    if (phaseThroughWalls) {
+                        // Mode 1: Phase through walls (X-ray / radar style)
                         updateEntityHealthBar(entity);
+                    } else {
+                        // Mode 2: Only render if at least one online player has direct visual line of sight
+                        let isVisible = hasLineOfSight(player, entity);
+                        if (!isVisible && players.length > 1) {
+                            for (const otherPlayer of players) {
+                                if (otherPlayer.id === player.id) continue;
+                                if (otherPlayer.dimension.id !== entity.dimension.id) continue;
+                                const dist = Math.hypot(
+                                    otherPlayer.location.x - entity.location.x,
+                                    otherPlayer.location.z - entity.location.z
+                                );
+                                if (dist <= maxDist && hasLineOfSight(otherPlayer, entity)) {
+                                    isVisible = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (isVisible) {
+                            updateEntityHealthBar(entity);
+                        } else {
+                            clearEntityHealthBar(entity);
+                        }
                     }
                 }
             } catch {

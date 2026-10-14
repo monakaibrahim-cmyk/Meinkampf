@@ -578,6 +578,15 @@ export const MobHealthBarConfig = {
     enabled: true,
 
     /**
+     * WALL VISIBILITY & LINE-OF-SIGHT BEHAVIOR:
+     * Choose whether mob health bars phase through walls or only render when mobs are directly visible:
+     * - true (Phase Through Walls): Health bars render through solid blocks and walls (X-ray / radar style; easily spot mobs in caves and structures).
+     * - false (Line of Sight Only): Health bars only render when you can actually see the mob without obstruction (clean survival immersion; hidden behind solid walls).
+     * Default: false
+     */
+    phaseThroughWalls: false,
+
+    /**
      * Show health bars above hostile mobs (Zombies, Skeletons, Creepers, Endermen, Wardens, etc.).
      * Default: true
      */
@@ -634,10 +643,10 @@ export const MobHealthBarConfig = {
 
     /**
      * Whether the mob health bar nameplate should be depth tested for visibility behind blocks.
-     * Set to false so the health bar is not culled by foliage, fences, or mob hitboxes.
-     * Default: false
+     * When phaseThroughWalls is false, this is automatically true.
+     * Default: true
      */
-    nameplateDepthTested: false,
+    nameplateDepthTested: true,
 
     /**
      * Periodic scan interval in game ticks (10 ticks = 0.5s, smooth low-overhead background response).
