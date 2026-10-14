@@ -1394,9 +1394,9 @@ export const AfkProtectionConfig = {
 export const SmartElytraConfig = {
     /**
      * Enable smart and manual Elytra <--> Chestplate switching.
-     * Default: true
+     * Default: false (turned off)
      */
-    enabled: true,
+    enabled: false,
 
     /**
      * MANUAL SWITCH CONTROLS
@@ -1405,9 +1405,9 @@ export const SmartElytraConfig = {
     manualSwitch: {
         /**
          * Enable manual hotkey switching.
-         * Default: true
+         * Default: false
          */
-        enabled: true,
+        enabled: false,
 
         /**
          * Hotkey trigger method:
@@ -1446,9 +1446,9 @@ export const SmartElytraConfig = {
     smartSwitch: {
         /**
          * Enable automatic context-aware switching.
-         * Default: true
+         * Default: false
          */
-        enabled: true,
+        enabled: false,
 
         /**
          * Auto-equip Elytra when in mid-air (jumping while airborne, or falling from height).
@@ -1520,6 +1520,48 @@ export const SmartElytraConfig = {
      * Default: true
      */
     showNotification: true,
+};
+
+export const SilkTouchSpawnerConfig = {
+    /**
+     * Enable Silk Touch harvesting for Mob Spawners.
+     * When broken with a Silk Touch pickaxe, drops the mob spawner item.
+     * Default: true
+     */
+    enabled: true,
+
+    /**
+     * Require a pickaxe with Silk Touch to harvest spawners.
+     * If false, any valid pickaxe can harvest spawners.
+     * Default: true
+     */
+    requireSilkTouch: true,
+
+    /**
+     * Minimum pickaxe tier required to harvest a spawner.
+     * (0 = Wood/Gold, 1 = Stone, 2 = Iron, 3 = Diamond, 4 = Netherite)
+     * Default: 2 (Iron pickaxe or higher)
+     */
+    requiredTier: 2,
+
+    /**
+     * Automatically drop a matching spawn egg if the spawner's mob type is detected nearby.
+     * Allows restoring the spawner's entity type when placed in survival.
+     * Default: true
+     */
+    dropMatchingSpawnEgg: true,
+
+    /**
+     * Deliver harvested spawner item directly to the player's position.
+     * Default: true
+     */
+    directPickup: true,
+
+    /**
+     * Play sound and particle effects when a spawner is successfully harvested.
+     * Default: true
+     */
+    playSounds: true,
 };
 
 

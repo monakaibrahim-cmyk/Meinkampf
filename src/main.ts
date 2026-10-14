@@ -1,6 +1,7 @@
 import { world } from "@minecraft/server";
 import { handleTreeBreak } from "./features/treeCapitator";
 import { handleVeinMine } from "./features/veinMiner";
+import { handleSilkTouchSpawner } from "./features/silkTouchSpawner";
 import { initFarmingFeature } from "./features/farming";
 import { initImmortalPetsFeature } from "./features/immortalPets";
 import { initDynamicLightingFeature } from "./features/dynamicLight";
@@ -52,4 +53,5 @@ world.afterEvents.playerSpawn.subscribe((event) => {
 world.afterEvents.playerBreakBlock.subscribe((event) => {
     handleTreeBreak(event);
     handleVeinMine(event);
+    handleSilkTouchSpawner(event);
 });

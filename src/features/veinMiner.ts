@@ -11,13 +11,14 @@ import {
     system,
     Vector3,
 } from "@minecraft/server";
-import { VeinMinerConfig } from "../config";
+import { SilkTouchSpawnerConfig, VeinMinerConfig } from "../config";
 import { posKey } from "../utils/blocks";
 import { damageMainhandTool, getPickaxeTier, isPickaxe } from "../utils/tools";
 import { showPlayerNotification } from "../utils/notifications";
+import { createHarvestedSpawnerItem } from "../utils/spawners";
 
 // Set of coordinates currently being broken by VeinMiner cascade to prevent re-entrancy
-const activeMiningPositions = new Set<string>();
+export const activeMiningPositions = new Set<string>();
 
 export interface OreDropInfo {
     items: { typeId: string; count: number }[];
@@ -25,7 +26,7 @@ export interface OreDropInfo {
 }
 
 /**
- * Returns the ore family name if the block is a supported ore.
+ * Returns the ore family name if the block is a supported ore or spawner.
  */
 export function getOreFamily(typeId: string): string | undefined {
     if (typeId.includes("coal_ore")) return "coal";
@@ -43,6 +44,7 @@ export function getOreFamily(typeId: string): string | undefined {
     if (typeId === "minecraft:raw_iron_block") return "raw_iron_block";
     if (typeId === "minecraft:raw_copper_block") return "raw_copper_block";
     if (typeId === "minecraft:raw_gold_block") return "raw_gold_block";
+    if (typeId === "minecraft:mob_spawner") return "spawner";
     return undefined;
 }
 
@@ -59,6 +61,7 @@ export function getRequiredTier(family: string): number {
         case "gold":
         case "redstone":
         case "raw_gold_block":
+        case "spawner":
             return 2; // Iron or above
         case "iron":
         case "copper":
@@ -96,8 +99,17 @@ export function getOreDrops(
 ): OreDropInfo {
     // 1. Silk Touch: Always drops the block itself with 0 XP
     if (silkTouchLevel > 0) {
+        if (family === "spawner" && !SilkTouchSpawnerConfig.enabled) {
+            return {
+                items: [],
+                xp: Math.floor(Math.random() * 29) + 15, // 15-43 XP
+            };
+        }
+        let dropId = blockTypeId;
+        if (dropId === "minecraft:lit_redstone_ore") dropId = "minecraft:redstone_ore";
+        if (dropId === "minecraft:lit_deepslate_redstone_ore") dropId = "minecraft:deepslate_redstone_ore";
         return {
-            items: [{ typeId: blockTypeId, count: 1 }],
+            items: [{ typeId: dropId, count: 1 }],
             xp: 0,
         };
     }
@@ -190,6 +202,17 @@ export function getOreDrops(
             return {
                 items: [{ typeId: blockTypeId, count: 1 }],
                 xp: 0,
+            };
+        case "spawner":
+            if (SilkTouchSpawnerConfig.enabled && !SilkTouchSpawnerConfig.requireSilkTouch) {
+                return {
+                    items: [{ typeId: "minecraft:mob_spawner", count: 1 }],
+                    xp: 0,
+                };
+            }
+            return {
+                items: [],
+                xp: Math.floor(Math.random() * 29) + 15, // 15-43 XP
             };
         default:
             return {
@@ -341,8 +364,20 @@ export function handleVeinMine(event: PlayerBreakBlockAfterEvent): void {
             const dropLocation = directPickup ? player.location : { x: node.pos.x + 0.5, y: node.pos.y + 0.5, z: node.pos.z + 0.5 };
 
             // Spawn items
-            for (const item of dropInfo.items) {
-                dimension.spawnItem(new ItemStack(item.typeId, item.count), dropLocation);
+            if (node.typeId === "minecraft:mob_spawner" && dropInfo.items.length > 0) {
+                const { spawnerItem, eggItem } = createHarvestedSpawnerItem(dimension, node.pos);
+                dimension.spawnItem(spawnerItem, dropLocation);
+                if (eggItem) {
+                    try {
+                        dimension.spawnItem(eggItem, dropLocation);
+                    } catch {
+                        // Egg item creation safety
+                    }
+                }
+            } else {
+                for (const item of dropInfo.items) {
+                    dimension.spawnItem(new ItemStack(item.typeId, item.count), dropLocation);
+                }
             }
 
             // Spawn XP
