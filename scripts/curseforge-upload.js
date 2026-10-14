@@ -305,6 +305,12 @@ async function main() {
     const releaseTag = (process.env.RELEASE_TAG || `v${pkgVersion}`).trim();
     const isPrerelease = process.env.IS_PRERELEASE === "true";
     const releaseType = process.env.CURSEFORGE_RELEASE_TYPE || (isPrerelease ? "beta" : "release");
+
+    if (isPrerelease || releaseType === "beta" || releaseType === "alpha") {
+        console.log(`[CurseForge] Skipping upload for ${releaseType} (prerelease) build. Official stable releases only.`);
+        process.exit(0);
+    }
+
     const releaseTitle = process.env.RELEASE_TITLE || `Bedrock QoL Suite ${releaseTag}`;
 
     // Locate the .mcaddon file

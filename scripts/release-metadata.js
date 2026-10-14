@@ -157,13 +157,96 @@ function generateAddonChangelog(version, repo, prevTag) {
     return content;
 }
 
+/**
+ * Calculates the sequential beta/alpha build number for a specific version.
+ * When the version in package.json changes (e.g. 1.0.3 -> 1.0.4), the counter
+ * automatically reverts back to 1 for the new version.
+ */
+function getBetaBuildNumber(version) {
+    if (process.env.BETA_NUMBER) {
+        const parsed = parseInt(process.env.BETA_NUMBER, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+
+    try {
+        // Find the initial commit on current branch that set this version in package.json
+        const logCmd = `git log -S '"version": "${version}"' --reverse --pretty=format:%H package.json`;
+        const output = execSync(logCmd, { encoding: "utf8" }).trim();
+        if (output) {
+            const bumpCommit = output.split("\n")[0].trim();
+            if (bumpCommit) {
+                const countStr = execSync(`git rev-list --count ${bumpCommit}..HEAD`, { encoding: "utf8" }).trim();
+                const count = parseInt(countStr, 10);
+                if (!isNaN(count)) {
+                    return count + 1;
+                }
+            }
+        }
+    } catch {
+        // Fallback
+    }
+
+    // Fallback: count commits on development ahead of main
+    try {
+        const aheadStr = execSync("git rev-list --count origin/main..HEAD 2>/dev/null || git rev-list --count main..HEAD 2>/dev/null", { encoding: "utf8" }).trim();
+        const ahead = parseInt(aheadStr, 10);
+        if (!isNaN(ahead) && ahead > 0) {
+            return ahead;
+        }
+    } catch {
+        // Fallback
+    }
+
+    return 1;
+}
+
+/**
+ * Smart filter for pre-release builds:
+ * - Experimental / new features -> Alpha
+ * - Bug fixes, performance improvements, refactors, and maintenance -> Beta
+ */
+function determineReleaseChannel(commits, refName) {
+    if (refName && refName.startsWith("alpha")) return "alpha";
+    if (refName && refName.startsWith("beta")) return "beta";
+    if (process.env.RELEASE_CHANNEL) {
+        const explicit = process.env.RELEASE_CHANNEL.toLowerCase();
+        if (explicit === "alpha" || explicit === "beta") return explicit;
+    }
+
+    const isFeatureOrExperimental = (subject) => {
+        if (!subject || typeof subject !== "string") return false;
+        const s = subject.trim();
+        return (
+            /^feat(\(.*\))?:/i.test(s) ||
+            /experimental/i.test(s) ||
+            /^feature(\(.*\))?:/i.test(s) ||
+            /\b(feat|feature|experiment|experimental)\b/i.test(s)
+        );
+    };
+
+    if (Array.isArray(commits) && commits.length > 0) {
+        const hasFeature = commits.some((c) => isFeatureOrExperimental(c.subject));
+        if (hasFeature) return "alpha";
+    }
+
+    try {
+        const latestSubject = execSync("git log -1 --pretty=%s", { encoding: "utf8" }).trim();
+        if (isFeatureOrExperimental(latestSubject)) {
+            return "alpha";
+        }
+    } catch {
+        // Fallback
+    }
+
+    return "beta";
+}
+
 function getMetadata() {
     const pkg = JSON.parse(readFileSync("package.json", "utf8"));
     const version = pkg.version || "1.0.0";
 
     const ref = process.env.GITHUB_REF || "";
     const refName = process.env.GITHUB_REF_NAME || getCurrentBranch();
-    const runNumber = process.env.GITHUB_RUN_NUMBER || "1";
     const sha = (process.env.GITHUB_SHA || getCurrentCommitSha()).slice(0, 7);
     const repo = process.env.GITHUB_REPOSITORY || "monakaibrahim-cmyk/Meinkampf";
 
@@ -172,16 +255,12 @@ function getMetadata() {
 
     let tag;
     let title;
+    let channel = "release";
     let isPrerelease;
     let makeLatest;
     let changelogFile = "";
 
     if (isDevelopment) {
-        tag = `v${version}-beta.${runNumber}`;
-        title = `Bedrock QoL Suite v${version} (Beta #${runNumber})`;
-        isPrerelease = "true";
-        makeLatest = "false";
-
         const notesPath = "prerelease_notes.md";
 
         // 1. Get latest addon commit for highlight header and description
@@ -215,6 +294,15 @@ function getMetadata() {
             })
             .filter((c) => isAddonCommit(c.fullHash));
 
+        // 3. Smart filter: experimental/new features -> Alpha, fixes -> Beta
+        channel = determineReleaseChannel(addonCommits.length > 0 ? addonCommits : (latestAddon ? [latestAddon] : []), refName);
+        const buildNum = getBetaBuildNumber(version);
+        tag = `v${version}-${channel}.${buildNum}`;
+        const channelDisplayName = channel === "alpha" ? "Alpha" : "Beta";
+        title = `Bedrock QoL Suite v${version} (${channelDisplayName} #${buildNum})`;
+        isPrerelease = "true";
+        makeLatest = "false";
+
         let commitsMarkdown = "";
         if (addonCommits.length > 0) {
             commitsMarkdown = addonCommits
@@ -240,7 +328,7 @@ function getMetadata() {
             `- **Branch:** \`${refName}\`\n` +
             `- **Commit:** [\`${sha || "HEAD"}\`](https://github.com/${repo}/commit/${process.env.GITHUB_SHA || getCurrentCommitSha()})\n` +
             `- **Author:** \`${latestAddon?.author || "developer"}\`\n` +
-            `- **Build:** \`#${runNumber}\`\n\n` +
+            `- **Build:** \`#${buildNum}\`\n\n` +
             `*Download the attached \`.mcaddon\` file below to install and test directly in Minecraft Bedrock (1.21+).*`;
 
         writeFileSync(notesPath, notesContent, "utf8");
@@ -267,6 +355,7 @@ function getMetadata() {
 
     console.log(`Release Version:   ${version}`);
     console.log(`Release Tag:       ${tag}`);
+    console.log(`Release Channel:   ${channel}`);
     console.log(`Release Title:     ${title}`);
     console.log(`Is Prerelease:     ${isPrerelease}`);
     console.log(`Make Latest:       ${makeLatest}`);
@@ -277,6 +366,7 @@ function getMetadata() {
         const outputs = [
             `version=${version}`,
             `tag=${tag}`,
+            `channel=${channel}`,
             `title=${title}`,
             `is_prerelease=${isPrerelease}`,
             `make_latest=${makeLatest}`,

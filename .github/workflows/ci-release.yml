@@ -135,12 +135,13 @@ jobs:
         run: node scripts/release-metadata.js
 
       - name: Create GitHub Release
+        if: steps.meta.outputs.is_prerelease != 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: dist/**/*.mcaddon
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.title }}
-          prerelease: ${{ steps.meta.outputs.is_prerelease == 'true' }}
+          prerelease: false
           make_latest: ${{ steps.meta.outputs.make_latest }}
           body_path: ${{ steps.meta.outputs.changelog }}
           generate_release_notes: false
@@ -148,7 +149,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to CurseForge
-        if: success()
+        if: success() && steps.meta.outputs.is_prerelease != 'true'
         run: node scripts/curseforge-upload.js
         env:
           CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
@@ -163,8 +164,11 @@ jobs:
         run: node scripts/discord-notify.js release
         env:
           DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          DISCORD_BETA_ALPHA_WEBHOOK: ${{ secrets.DISCORD_BETA_ALPHA_WEBHOOK }}
+          DISCORD_DEV_WEBHOOK: ${{ secrets.DISCORD_DEV_WEBHOOK }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           RELEASE_TITLE: ${{ steps.meta.outputs.title }}
+          RELEASE_CHANNEL: ${{ steps.meta.outputs.channel }}
           IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}
           CHANGELOG_PATH: ${{ steps.meta.outputs.changelog }}

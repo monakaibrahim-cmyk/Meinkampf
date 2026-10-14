@@ -78,14 +78,36 @@ function findPatchNotesFile(targetVersion) {
 async function sendDiscordNotification() {
     const eventType = process.argv[2] || "commit";
 
-    // Allow dedicated release webhook channel (falling back to general webhook)
-    const webhookUrl = eventType === "release"
-        ? (process.env.DISCORD_RELEASE_WEBHOOK || process.env.DISCORD_WEBHOOK || "")
-        : (process.env.DISCORD_DEV_WEBHOOK || process.env.DISCORD_WEBHOOK || "");
+    const isPrerelease = process.env.IS_PRERELEASE === "true" ||
+        (process.env.GITHUB_REF_NAME || getCurrentBranch()) === "development" ||
+        (process.env.GITHUB_REF_NAME || getCurrentBranch()).startsWith("dev/") ||
+        (process.env.GITHUB_REF_NAME || getCurrentBranch()).startsWith("alpha") ||
+        (process.env.GITHUB_REF_NAME || getCurrentBranch()).startsWith("beta");
+
+    let webhookUrl = "";
+    let defaultUsername = "Meinkampf";
+
+    if (eventType === "release") {
+        if (isPrerelease) {
+            // Alpha/Beta builds go to DISCORD_BETA_ALPHA_WEBHOOK (named 'Hermann Göring')
+            webhookUrl = process.env.DISCORD_BETA_ALPHA_WEBHOOK || process.env.DISCORD_RELEASE_WEBHOOK || process.env.DISCORD_WEBHOOK || "";
+            defaultUsername = "Hermann Göring";
+        } else {
+            // Official stable releases go to DISCORD_RELEASE_WEBHOOK
+            webhookUrl = process.env.DISCORD_RELEASE_WEBHOOK || process.env.DISCORD_WEBHOOK || "";
+            defaultUsername = "Meinkampf";
+        }
+    } else {
+        // Dev notifications (commits, failures) go to DISCORD_DEV_WEBHOOK (named 'Joseph Goebbels')
+        webhookUrl = process.env.DISCORD_DEV_WEBHOOK || process.env.DISCORD_WEBHOOK || "";
+        defaultUsername = "Joseph Goebbels";
+    }
 
     if (!webhookUrl) {
-        const targetEnv = eventType === "release" ? "DISCORD_RELEASE_WEBHOOK or DISCORD_WEBHOOK" : "DISCORD_WEBHOOK";
-        console.log(`[Discord Notify] ${targetEnv} is not configured. Skipping '${eventType}' notification.`);
+        const targetEnv = eventType === "release"
+            ? (isPrerelease ? "DISCORD_BETA_ALPHA_WEBHOOK" : "DISCORD_RELEASE_WEBHOOK")
+            : "DISCORD_DEV_WEBHOOK";
+        console.log(`[Discord Notify] ${targetEnv} (or DISCORD_WEBHOOK) is not configured. Skipping '${eventType}' notification.`);
         return;
     }
 
@@ -141,8 +163,9 @@ async function sendDiscordNotification() {
             const rawTag = process.env.RELEASE_TAG || `v${version}`;
             const cleanVersion = rawTag.replace(/^v/, "").split("-")[0];
             const title = process.env.RELEASE_TITLE || `Bedrock QoL Suite ${rawTag}`;
-            const isPrerelease = process.env.IS_PRERELEASE === "true" || refName === "development";
-            const releaseUrl = `${repoUrl}/releases/tag/${rawTag}`;
+            const releaseUrl = isPrerelease ? commitUrl : `${repoUrl}/releases/tag/${rawTag}`;
+            const channel = (process.env.RELEASE_CHANNEL || (rawTag.includes("-alpha.") ? "alpha" : rawTag.includes("-beta.") ? "beta" : "beta")).toLowerCase();
+            const isAlpha = channel === "alpha";
 
             // 1. Locate and prepare .mcaddon attachment
             const addonPath = findMcAddonFile(cleanVersion);
@@ -180,34 +203,46 @@ async function sendDiscordNotification() {
             }
 
             // 3. Prepare description with highlights and full changelog in embed
-            let descriptionPrefix = isPrerelease
-                ? `⚠️ **Development Preview Build (${rawTag})** is ready for testing!\nDownload the attached \`.mcaddon\` below to install directly into Minecraft Bedrock.`
-                : `🎉 **New Official Release (${rawTag})** is now live!\nDownload the attached \`.mcaddon\` below to install directly into Minecraft Bedrock.`;
+            let descriptionPrefix = "";
+            if (isPrerelease) {
+                if (isAlpha) {
+                    descriptionPrefix = `🔬 **Alpha Preview Build (${rawTag})** featuring experimental & new features is ready for testing!\nDownload the attached \`.mcaddon\` below to install directly into Minecraft Bedrock.`;
+                } else {
+                    descriptionPrefix = `🛠️ **Beta Preview Build (${rawTag})** with fixes & improvements is ready for testing!\nDownload the attached \`.mcaddon\` below to install directly into Minecraft Bedrock.`;
+                }
+            } else {
+                descriptionPrefix = `🎉 **New Official Release (${rawTag})** is now live!\nDownload the attached \`.mcaddon\` below to install directly into Minecraft Bedrock.`;
+            }
 
             let changelogSection = "";
             if (patchNotesText) {
                 // Discord embed description limit is 4096 characters (keep under 3600 for safe headroom)
                 const maxChangelogLen = 3600;
                 if (patchNotesText.length > maxChangelogLen) {
+                    const viewMore = isPrerelease
+                        ? `\n\n... *(changelog truncated for Discord preview)*`
+                        : `\n\n... *(view complete changelog on [GitHub Releases](${releaseUrl}))*`;
                     changelogSection = `\n\n### 📋 Changelog\n` +
                         patchNotesText.slice(0, maxChangelogLen).trim() +
-                        `\n\n... *(view complete changelog on [GitHub Releases](${releaseUrl}))*`;
+                        viewMore;
                 } else {
                     changelogSection = `\n\n### 📋 Changelog\n` + patchNotesText;
                 }
             }
 
             embed = {
-                title: isPrerelease ? `🧪 Beta Release: ${title}` : `🚀 Official Release: ${title}`,
+                title: isPrerelease
+                    ? (isAlpha ? `🔬 Alpha Release: ${title}` : `🧪 Beta Release: ${title}`)
+                    : `🚀 Official Release: ${title}`,
                 url: releaseUrl,
-                color: isPrerelease ? 0xF1C40F : 0x2ECC71, // Gold for Beta, Green for Stable
+                color: isPrerelease ? (isAlpha ? 0xE67E22 : 0xF1C40F) : 0x2ECC71, // Orange for Alpha, Gold for Beta, Green for Stable
                 description: descriptionPrefix + changelogSection,
                 fields: [
-                    { name: "Tag", value: `[\`${rawTag}\`](${releaseUrl})`, inline: true },
-                    { name: "Channel", value: isPrerelease ? "Beta / Development" : "Stable Release", inline: true },
+                    { name: isPrerelease ? "Build" : "Tag", value: `[\`${rawTag}\`](${releaseUrl})`, inline: true },
+                    { name: "Channel", value: isPrerelease ? (isAlpha ? "Alpha (Experimental)" : "Beta (Fixes)") : "Stable Release", inline: true },
                     { name: "Target", value: `\`${refName}\``, inline: true }
                 ],
-                footer: { text: "Bedrock QoL Suite • Releases" },
+                footer: { text: isPrerelease ? `Bedrock QoL Suite • ${isAlpha ? "Alpha" : "Beta"} Build` : "Bedrock QoL Suite • Releases" },
                 timestamp: new Date().toISOString()
             };
 
@@ -222,11 +257,19 @@ async function sendDiscordNotification() {
                 });
             }
 
-            embed.fields.push({
-                name: "GitHub Release & Assets",
-                value: `[View Full Release on GitHub](${releaseUrl})`,
-                inline: false
-            });
+            if (!isPrerelease) {
+                embed.fields.push({
+                    name: "GitHub Release & Assets",
+                    value: `[View Full Release on GitHub](${releaseUrl})`,
+                    inline: false
+                });
+            } else {
+                embed.fields.push({
+                    name: "Development Build",
+                    value: `[\`Commit ${shortSha}\`](${commitUrl}) • [Repository Tree](${repoUrl}/tree/${refName})`,
+                    inline: false
+                });
+            }
 
             break;
         }
@@ -260,7 +303,7 @@ async function sendDiscordNotification() {
     }
 
     const payload = {
-        username: process.env.DISCORD_USERNAME || "Meinkampf",
+        username: process.env.DISCORD_USERNAME || defaultUsername,
         embeds: [embed]
     };
 
