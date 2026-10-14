@@ -1702,7 +1702,80 @@ export const AutoEatConfig = {
     showNotification: true,
 };
 
+export const DeathChestConfig = {
+    /**
+     * Enable Death Chest (Grave Chest) feature.
+     * Automatically captures player items upon death and places them into a safe chest at the death location.
+     * Default: true
+     */
+    enabled: true,
 
+    /**
+     * Mark feature as experimental.
+     * Default: true
+     */
+    isExperimental: true,
 
+    /**
+     * Smart Chest Sizing:
+     * - Uses a Single Chest (27 slots) if carried items <= 27.
+     * - Automatically upgrades to a Large Double Chest (54 slots) if carried items > 27 (up to 41 max player slots).
+     * Default: true
+     */
+    smartChestSizing: true,
 
+    /**
+     * Safe Placement:
+     * - Automatically finds solid ground if player fell from height.
+     * - Avoids suffocating inside solid blocks (scans up to open air).
+     * - Safely elevates above lava / fire pools.
+     * - Rescues items from falling into the void (places at minimum safe altitude).
+     * Default: true
+     */
+    safePlacement: true,
 
+    /**
+     * Create a small solid cobblestone platform under the chest when spawned over lava, fire, or the void.
+     * Prevents the chest from burning and gives the player safe footing upon return.
+     * Default: true
+     */
+    createSafePlatform: true,
+
+    /**
+     * Protect the death chest and its platform from Creeper, Ghast, and TNT explosions.
+     * Default: true
+     */
+    protectFromExplosions: true,
+
+    /**
+     * Quick Recover on Sneak + Interact:
+     * Sneak and right-click (interact) the Death Chest to instantly loot all items and auto-equip armor.
+     * If false, player opens the chest UI normally.
+     * Default: true
+     */
+    quickRecoverOnSneakInteract: true,
+
+    /**
+     * Send death coordinates to the player in chat upon dying.
+     * Default: true
+     */
+    showCoordinatesInChat: true,
+
+    /**
+     * Send a reminder with coordinates and distance when the player respawns.
+     * Default: true
+     */
+    showRespawnReminder: true,
+
+    /**
+     * Play sound effects and visual particles when the death chest is created.
+     * Default: true
+     */
+    playEffects: true,
+
+    /**
+     * Play levelup chime and particle effects when reclaiming the death chest.
+     * Default: true
+     */
+    playReclaimEffects: true,
+};
