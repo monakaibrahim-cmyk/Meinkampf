@@ -247,12 +247,15 @@ export function swapElytraAndChestplate(
         const newChestItem = container.getItem(bestChestplate.slot);
         if (!newChestItem) return false;
 
-        // Exchange slots: Put equipped Elytra into inventory slot, equip chestplate
-        container.setItem(bestChestplate.slot, currentChest);
-        equippable.setEquipment(EquipmentSlot.Chest, newChestItem);
+        const clonedChest = currentChest ? currentChest.clone() : undefined;
+        const clonedNewChest = newChestItem.clone();
 
-        playEquipSound(player, newChestItem.typeId);
-        showSwapNotification(player, "chestplate", newChestItem);
+        // Exchange slots: Put equipped Elytra into inventory slot, equip chestplate
+        container.setItem(bestChestplate.slot, clonedChest);
+        equippable.setEquipment(EquipmentSlot.Chest, clonedNewChest);
+
+        playEquipSound(player, clonedNewChest.typeId);
+        showSwapNotification(player, "chestplate", clonedNewChest);
 
         const state = getFlightState(player.id);
         state.wasGliding = false;
@@ -271,12 +274,15 @@ export function swapElytraAndChestplate(
         const newElytraItem = container.getItem(bestElytra.slot);
         if (!newElytraItem) return false;
 
+        const clonedChest = currentChest ? currentChest.clone() : undefined;
+        const clonedNewElytra = newElytraItem.clone();
+
         // Exchange slots: Put equipped chestplate into inventory slot, equip Elytra
-        container.setItem(bestElytra.slot, currentChest);
-        equippable.setEquipment(EquipmentSlot.Chest, newElytraItem);
+        container.setItem(bestElytra.slot, clonedChest);
+        equippable.setEquipment(EquipmentSlot.Chest, clonedNewElytra);
 
         playEquipSound(player, "minecraft:elytra");
-        showSwapNotification(player, "elytra", newElytraItem);
+        showSwapNotification(player, "elytra", clonedNewElytra);
 
         const state = getFlightState(player.id);
         state.wasGliding = true;
@@ -355,11 +361,10 @@ function processSmartElytraTick(): void {
 
             if (
                 wearingElytra &&
-                state.wasGliding &&
                 SmartElytraConfig.smartSwitch.enabled &&
                 SmartElytraConfig.smartSwitch.autoEquipChestplateOnLand
             ) {
-                // Delay swap slightly to ensure safe touchdown without oscillating on low glides
+                // Return to chestplate once settled safely on the ground
                 if (state.groundTicks >= SmartElytraConfig.smartSwitch.landDelayTicks) {
                     if (currentTick - state.lastSwapTick >= SmartElytraConfig.manualSwitch.cooldownTicks) {
                         swapElytraAndChestplate(player, "chestplate", true);
@@ -387,16 +392,36 @@ function processSmartElytraTick(): void {
                 continue;
             }
 
-            const velocity = player.getVelocity();
-            const isMidairJump = player.isJumping && state.airborneTicks >= 2;
+            let velocity = { x: 0, y: 0, z: 0 };
+            try {
+                velocity = player.getVelocity();
+            } catch {
+                // Ignore
+            }
+
+            let holdingFirework = false;
+            if (SmartElytraConfig.smartSwitch.autoEquipWhenHoldingFireworkInAir) {
+                try {
+                    const mainHand = equippable.getEquipment(EquipmentSlot.Mainhand);
+                    const offHand = equippable.getEquipment(EquipmentSlot.Offhand);
+                    holdingFirework =
+                        mainHand?.typeId === "minecraft:firework_rocket" ||
+                        offHand?.typeId === "minecraft:firework_rocket";
+                } catch {
+                    // Ignore
+                }
+            }
+
             const isFallingFast =
                 velocity.y < SmartElytraConfig.smartSwitch.downwardVelocityThreshold &&
-                state.airborneTicks >= 3;
-            const isHighFall =
-                player.isFalling &&
-                fallDistance >= SmartElytraConfig.smartSwitch.minFallDistanceForElytra;
+                state.airborneTicks >= 3 &&
+                fallDistance >= 1.2;
 
-            if (isMidairJump || isFallingFast || isHighFall) {
+            const isHighFall =
+                fallDistance >= SmartElytraConfig.smartSwitch.minFallDistanceForElytra &&
+                velocity.y < 0;
+
+            if (holdingFirework || isFallingFast || isHighFall) {
                 swapElytraAndChestplate(player, "elytra", true);
             }
         }
@@ -407,7 +432,7 @@ function processSmartElytraTick(): void {
  * Handles physical input buttons (Sneak and Jump) across Mobile, Keyboard, and Controller.
  */
 function handleButtonInput(event: { player: Player; button: InputButton; newButtonState: ButtonState }): void {
-    if (!SmartElytraConfig.enabled || !SmartElytraConfig.manualSwitch.enabled) return;
+    if (!SmartElytraConfig.enabled) return;
     if (event.newButtonState !== ButtonState.Pressed) return;
 
     const player = event.player;
@@ -419,9 +444,32 @@ function handleButtonInput(event: { player: Player; button: InputButton; newButt
 
     const mode = SmartElytraConfig.manualSwitch.hotkeyMode;
 
-    // A. Double-Sneak (Shift x2 on PC, Crouch x2 on Mobile/Controller)
+    // A. Mid-Air Jump Press (Spacebar on PC / Touch Jump button on Mobile)
+    // Tapping Jump while airborne with chestplate immediately deploys Elytra for flight
+    if (event.button === InputButton.Jump && !player.isOnGround) {
+        if (SmartElytraConfig.smartSwitch.enabled && SmartElytraConfig.smartSwitch.autoEquipElytraInAir) {
+            const equippable = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
+            const chest = equippable?.getEquipment(EquipmentSlot.Chest);
+            if (isChestplate(chest)) {
+                swapElytraAndChestplate(player, "elytra", true);
+                return;
+            }
+        }
+    }
+
+    // B. Ground Sneak + Jump (Shift + Space on PC / Crouch + Jump on Mobile)
+    if (event.button === InputButton.Jump && player.isOnGround) {
+        if (SmartElytraConfig.manualSwitch.enabled && (mode === "all" || mode === "sneak_jump")) {
+            if (player.isSneaking) {
+                swapElytraAndChestplate(player);
+                return;
+            }
+        }
+    }
+
+    // C. Double-Sneak (Shift x2 on PC, Crouch x2 on Mobile/Controller)
     if (event.button === InputButton.Sneak) {
-        if (mode === "all" || mode === "double_sneak") {
+        if (SmartElytraConfig.manualSwitch.enabled && (mode === "all" || mode === "double_sneak")) {
             const now = Date.now();
             const diff = now - state.lastSneakTime;
             if (diff > 50 && diff <= SmartElytraConfig.manualSwitch.doubleSneakWindowMs) {
@@ -432,32 +480,56 @@ function handleButtonInput(event: { player: Player; button: InputButton; newButt
             state.lastSneakTime = now;
         }
     }
-
-    // B. Sneak + Jump (Shift + Space on PC, Sneak + Jump on Mobile)
-    if (event.button === InputButton.Jump) {
-        if (mode === "all" || mode === "sneak_jump") {
-            if (player.isSneaking) {
-                swapElytraAndChestplate(player);
-            }
-        }
-    }
 }
 
 /**
- * Handles airborne firework rocket use to immediately equip Elytra for propulsion.
+ * Handles airborne firework rocket use and Crouch + Interact in air hotkey.
  */
 function handleItemUse(event: { source: Player; itemStack: ItemStack }): void {
-    if (!SmartElytraConfig.enabled || !SmartElytraConfig.smartSwitch.enabled) return;
-    if (!SmartElytraConfig.smartSwitch.autoEquipOnFireworkUse) return;
-
-    if (event.itemStack.typeId !== "minecraft:firework_rocket") return;
+    if (!SmartElytraConfig.enabled) return;
 
     const player = event.source;
     if (!player || !player.isValid) return;
 
-    // Only auto-equip if player is airborne (fireworks on the ground are decorative)
-    if (!player.isOnGround) {
-        swapElytraAndChestplate(player, "elytra", true);
+    const item = event.itemStack;
+
+    // 1. Mid-air Firework Rocket boost
+    if (item.typeId === "minecraft:firework_rocket" && !player.isOnGround) {
+        if (SmartElytraConfig.smartSwitch.enabled && SmartElytraConfig.smartSwitch.autoEquipOnFireworkUse) {
+            swapElytraAndChestplate(player, "elytra", true);
+            return;
+        }
+    }
+
+    // 2. Manual Hotkey: Sneak + Right Click / Tap in air (Shift + Right Click on PC, Crouch + Tap on Mobile)
+    if (SmartElytraConfig.manualSwitch.enabled && player.isSneaking) {
+        const mode = SmartElytraConfig.manualSwitch.hotkeyMode;
+        if (mode === "all" || mode === "sneak_use") {
+            let blockInView;
+            try {
+                blockInView = player.getBlockFromViewDirection({ maxDistance: 6 });
+            } catch {
+                return;
+            }
+
+            // Only toggle when interacting into air
+            if (!blockInView) {
+                // Ensure no conflict with placeable offhand lights
+                if (
+                    item.typeId !== "minecraft:torch" &&
+                    item.typeId !== "minecraft:soul_torch" &&
+                    item.typeId !== "minecraft:lantern" &&
+                    item.typeId !== "minecraft:soul_lantern" &&
+                    item.typeId !== "minecraft:candle"
+                ) {
+                    const currentTick = system.currentTick;
+                    const state = getFlightState(player.id);
+                    if (currentTick - state.lastSwapTick >= SmartElytraConfig.manualSwitch.cooldownTicks) {
+                        swapElytraAndChestplate(player);
+                    }
+                }
+            }
+        }
     }
 }
 

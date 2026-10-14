@@ -1394,9 +1394,9 @@ export const AfkProtectionConfig = {
 export const SmartElytraConfig = {
     /**
      * Enable smart and manual Elytra <--> Chestplate switching.
-     * Default: false
+     * Default: true
      */
-    enabled: false,
+    enabled: true,
 
     /**
      * MANUAL SWITCH CONTROLS
@@ -1405,16 +1405,16 @@ export const SmartElytraConfig = {
     manualSwitch: {
         /**
          * Enable manual hotkey switching.
-         * Default: false
+         * Default: true
          */
-        enabled: false,
+        enabled: true,
 
         /**
          * Hotkey trigger method:
-         * - "all": Supports Double-Sneak, Sneak+Jump, and Sneak+Interact
+         * - "all": Supports Sneak+Interact/Right-Click, Double-Sneak, and Sneak+Jump
+         * - "sneak_use": Right-click / Interact in air while Sneaking (Shift + Right-Click on PC, Crouch + Tap on Mobile)
          * - "double_sneak": Tap Sneak twice within doubleSneakWindowMs (PC: Shift x2, Mobile: Crouch x2, Controller: B x2)
-         * - "sneak_jump": Press Jump while Sneaking (PC: Shift + Space)
-         * - "sneak_use": Right-click / Interact while Sneaking
+         * - "sneak_jump": Press Jump while Sneaking (PC: Shift + Space, Mobile: Crouch + Jump)
          * Default: "all"
          */
         hotkeyMode: "all" as "all" | "double_sneak" | "sneak_jump" | "sneak_use",
@@ -1446,9 +1446,9 @@ export const SmartElytraConfig = {
     smartSwitch: {
         /**
          * Enable automatic context-aware switching.
-         * Default: false
+         * Default: true
          */
-        enabled: false,
+        enabled: true,
 
         /**
          * Auto-equip Elytra when in mid-air (jumping while airborne, or falling from height).
@@ -1457,16 +1457,24 @@ export const SmartElytraConfig = {
         autoEquipElytraInAir: true,
 
         /**
-         * Minimum fall distance in blocks before auto-equipping Elytra.
-         * Default: 2.5 blocks
+         * Auto-equip Elytra immediately when holding a Firework Rocket in mid-air.
+         * Prepares wings before launching rocket so boost works on the very first click/touch.
+         * Default: true
          */
-        minFallDistanceForElytra: 2.5,
+        autoEquipWhenHoldingFireworkInAir: true,
+
+        /**
+         * Minimum fall distance in blocks before auto-equipping Elytra.
+         * Calibrated to 1.8 blocks to allow 1-block bunny hops and auto-jumps without false triggers.
+         * Default: 1.8 blocks
+         */
+        minFallDistanceForElytra: 1.8,
 
         /**
          * Downward vertical velocity (velocity.y) threshold to trigger Elytra auto-equip.
-         * Default: -0.45
+         * Default: -0.2
          */
-        downwardVelocityThreshold: -0.45,
+        downwardVelocityThreshold: -0.2,
 
         /**
          * Auto-equip Elytra when using a Firework Rocket while in mid-air.
@@ -1483,9 +1491,9 @@ export const SmartElytraConfig = {
         /**
          * Delay in ticks on ground before swapping back to chestplate.
          * Prevents accidental swapping during low-altitude glides or bunny hops.
-         * Default: 6 ticks (0.3s)
+         * Default: 4 ticks (0.2s)
          */
-        landDelayTicks: 6,
+        landDelayTicks: 4,
 
         /**
          * Auto-equip Chestplate when hurt by mobs or players while on the ground.
