@@ -1706,12 +1706,17 @@ export const DeathChestConfig = {
     /**
      * Enable Death Chest (Grave Chest) feature.
      * Automatically captures player items upon death and places them into a safe chest at the death location.
-     * Default: true
+     *
+     * EXPERIMENTAL STATUS:
+     * This feature is currently in active testing and feedback phase.
+     * Default for stable releases: false (disabled by default).
+     * Current build status: true (temporarily enabled for manual in-game testing phase).
      */
     enabled: true,
 
     /**
      * Mark feature as experimental.
+     * Indicates the feature is in active testing and subject to feedback/balancing.
      * Default: true
      */
     isExperimental: true,
