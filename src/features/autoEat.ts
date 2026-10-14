@@ -607,6 +607,12 @@ export function consumeFood(player: Player, foodLoc: FoodLocation): void {
         // 6. Sound effects
         if (AutoEatConfig.playSounds) {
             try {
+                if (!AutoEatConfig.useVanillaEatingAnimation) {
+                    player.dimension.playSound("random.eat", player.location, {
+                        volume: 0.8,
+                        pitch: 0.95 + Math.random() * 0.1,
+                    });
+                }
                 player.dimension.playSound("random.burp", player.location, { volume: 0.8, pitch: 1.0 });
             } catch {
                 // Ignore
@@ -853,7 +859,12 @@ export function tryAutoEat(player: Player, isEmergency: boolean = false): boolea
     const foodLoc = findBestFood(player, emergency);
     if (!foodLoc) return false;
 
-    startEatingSession(player, foodLoc, emergency);
+    if (AutoEatConfig.useVanillaEatingAnimation) {
+        startEatingSession(player, foodLoc, emergency);
+    } else {
+        triggerArmEatingAnimation(player);
+        consumeFood(player, foodLoc);
+    }
     return true;
 }
 

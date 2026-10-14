@@ -1573,6 +1573,14 @@ export const AutoEatConfig = {
     enabled: true,
 
     /**
+     * Use realistic vanilla eating animation and progressive chewing duration (32 ticks = 1.6s).
+     * If false: Food is consumed instantly when triggered (like Auto Totem).
+     * If true: Requires a progressive 1.6-second eating cycle with chewing animation and movement balancing.
+     * Default: false
+     */
+    useVanillaEatingAnimation: false,
+
+    /**
      * Hunger threshold (0 to 20) to trigger auto-eating.
      * When current hunger drops to or below this value, the player will eat.
      * Default: 14 (7 hunger drumsticks; allows sprinting and maintains natural healing buffer)
