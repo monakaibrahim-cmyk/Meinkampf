@@ -13,7 +13,13 @@ import {
 } from "@minecraft/server";
 import { SilkTouchSpawnerConfig, VeinMinerConfig } from "../config";
 import { posKey } from "../utils/blocks";
-import { damageMainhandTool, getPickaxeTier, isPickaxe } from "../utils/tools";
+import {
+    damageMainhandTool,
+    getItemEnchantmentLevel,
+    getPickaxeTier,
+    getPlayerMainhandItem,
+    isPickaxe,
+} from "../utils/tools";
 import { showPlayerNotification } from "../utils/notifications";
 import { createHarvestedSpawnerItem } from "../utils/spawners";
 
@@ -37,7 +43,7 @@ export function getOreFamily(typeId: string): string | undefined {
     if (typeId.includes("lapis_ore")) return "lapis";
     if (typeId.includes("diamond_ore")) return "diamond";
     if (typeId.includes("emerald_ore")) return "emerald";
-    if (typeId.includes("nether_quartz_ore")) return "quartz";
+    if (typeId.includes("quartz_ore")) return "quartz";
     if (typeId.includes("ancient_debris")) return "ancient_debris";
     if (typeId === "minecraft:glowstone") return "glowstone";
     if (typeId === "minecraft:amethyst_cluster") return "amethyst";
@@ -249,12 +255,13 @@ export function handleVeinMine(event: PlayerBreakBlockAfterEvent): void {
     }
 
     // 2. Validate pickaxe requirements
-    if (VeinMinerConfig.requirePickaxe && !isPickaxe(itemStackBeforeBreak)) {
+    const tool = itemStackBeforeBreak ?? getPlayerMainhandItem(player);
+    if (VeinMinerConfig.requirePickaxe && !isPickaxe(tool)) {
         return;
     }
 
     // 3. Validate pickaxe harvest tier
-    const pickaxeTier = getPickaxeTier(itemStackBeforeBreak);
+    const pickaxeTier = getPickaxeTier(tool);
     const requiredTier = getRequiredTier(family);
     if (pickaxeTier < requiredTier) {
         return;
@@ -265,22 +272,13 @@ export function handleVeinMine(event: PlayerBreakBlockAfterEvent): void {
         return;
     }
 
-    // 5. Read player's pickaxe enchantments
+    // 5. Read player's pickaxe enchantments (Fortune & Silk Touch)
     let fortuneLevel = 0;
     let silkTouchLevel = 0;
 
-    if (VeinMinerConfig.supportEnchantments && itemStackBeforeBreak) {
-        try {
-            const enchantable = itemStackBeforeBreak.getComponent(
-                ItemComponentTypes.Enchantable
-            ) as ItemEnchantableComponent | undefined;
-            if (enchantable) {
-                fortuneLevel = enchantable.getEnchantment("fortune")?.level ?? 0;
-                silkTouchLevel = enchantable.getEnchantment("silk_touch")?.level ?? 0;
-            }
-        } catch {
-            // Ignore
-        }
+    if (VeinMinerConfig.supportEnchantments && tool) {
+        fortuneLevel = getItemEnchantmentLevel(tool, "fortune");
+        silkTouchLevel = getItemEnchantmentLevel(tool, "silk_touch");
     }
 
     // 6. BFS Search for all connected ores of the same family

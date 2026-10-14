@@ -1,5 +1,7 @@
 import {
+    EnchantmentTypes,
     EntityComponentTypes,
+    EntityEquippableComponent,
     EquipmentSlot,
     GameMode,
     ItemComponentTypes,
@@ -41,6 +43,65 @@ export function getPickaxeTier(item?: ItemStack): number {
 }
 
 /**
+ * Retrieves the ItemStack currently equipped in the player's mainhand.
+ */
+export function getPlayerMainhandItem(player: Player): ItemStack | undefined {
+    try {
+        const equippable = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
+        return equippable?.getEquipment(EquipmentSlot.Mainhand);
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Safely retrieves the level of an enchantment on an ItemStack.
+ * Resolves via EnchantmentTypes catalog, direct string ID, and list iteration.
+ */
+export function getItemEnchantmentLevel(item: ItemStack | undefined, enchantmentId: string): number {
+    if (!item) return 0;
+    try {
+        const enchantable = item.getComponent(ItemComponentTypes.Enchantable) as ItemEnchantableComponent | undefined;
+        if (!enchantable) return 0;
+
+        // 1. Try resolving via EnchantmentTypes catalog
+        try {
+            const type = EnchantmentTypes.get(enchantmentId) ?? EnchantmentTypes.get(`minecraft:${enchantmentId}`);
+            if (type) {
+                const ench = enchantable.getEnchantment(type);
+                if (ench && ench.level > 0) return ench.level;
+            }
+        } catch {
+            // Ignore catalog lookup error
+        }
+
+        // 2. Try direct string ID
+        try {
+            const ench = enchantable.getEnchantment(enchantmentId) ?? enchantable.getEnchantment(`minecraft:${enchantmentId}`);
+            if (ench && ench.level > 0) return ench.level;
+        } catch {
+            // Ignore string lookup error
+        }
+
+        // 3. Fallback: iterate over all present enchantments on the item
+        try {
+            const list = enchantable.getEnchantments();
+            for (const ench of list) {
+                const id = ench.type.id;
+                if (id === enchantmentId || id === `minecraft:${enchantmentId}` || id.endsWith(enchantmentId)) {
+                    return ench.level;
+                }
+            }
+        } catch {
+            // Ignore list iteration error
+        }
+    } catch {
+        // Fallback
+    }
+    return 0;
+}
+
+/**
  * Applies durability damage to the tool currently held in the player's mainhand.
  * Accounts for Unbreaking enchantments and handles tool breakage.
  * Returns true if the tool survived (or player is creative), false if it broke.
@@ -67,8 +128,7 @@ export function damageMainhandTool(player: Player, damageAmount: number): boolea
     if (!durability || durability.unbreakable) return true;
 
     // Check for Unbreaking enchantment
-    const enchantable = mainhand.getComponent(ItemComponentTypes.Enchantable) as ItemEnchantableComponent | undefined;
-    let unbreakingLevel = enchantable?.getEnchantment("unbreaking")?.level ?? 0;
+    let unbreakingLevel = getItemEnchantmentLevel(mainhand, "unbreaking");
     if (unbreakingLevel === 0) {
         try {
             const raw = mainhand.getDynamicProperty("qol_durability_enchants");

@@ -1,12 +1,15 @@
 import {
     GameMode,
-    ItemComponentTypes,
-    ItemEnchantableComponent,
     PlayerBreakBlockAfterEvent,
     Vector3,
 } from "@minecraft/server";
 import { SilkTouchSpawnerConfig } from "../config";
-import { getPickaxeTier, isPickaxe } from "../utils/tools";
+import {
+    getItemEnchantmentLevel,
+    getPickaxeTier,
+    getPlayerMainhandItem,
+    isPickaxe,
+} from "../utils/tools";
 import { showPlayerNotification } from "../utils/notifications";
 import { activeMiningPositions } from "./veinMiner";
 import { posKey } from "../utils/blocks";
@@ -43,24 +46,12 @@ export function handleSilkTouchSpawner(event: PlayerBreakBlockAfterEvent): void 
     }
 
     // Must be a pickaxe of the required tier
-    if (!isPickaxe(itemStackBeforeBreak)) return;
-    if (getPickaxeTier(itemStackBeforeBreak) < SilkTouchSpawnerConfig.requiredTier) return;
+    const tool = itemStackBeforeBreak ?? getPlayerMainhandItem(player);
+    if (!isPickaxe(tool)) return;
+    if (getPickaxeTier(tool) < SilkTouchSpawnerConfig.requiredTier) return;
 
     // Check Silk Touch enchantment
-    let silkTouchLevel = 0;
-    if (itemStackBeforeBreak) {
-        try {
-            const enchantable = itemStackBeforeBreak.getComponent(
-                ItemComponentTypes.Enchantable
-            ) as ItemEnchantableComponent | undefined;
-            if (enchantable) {
-                silkTouchLevel = enchantable.getEnchantment("silk_touch")?.level ?? 0;
-            }
-        } catch {
-            // Ignore
-        }
-    }
-
+    const silkTouchLevel = getItemEnchantmentLevel(tool, "silk_touch");
     if (SilkTouchSpawnerConfig.requireSilkTouch && silkTouchLevel <= 0) {
         return;
     }
