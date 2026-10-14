@@ -388,6 +388,37 @@ export const DynamicLightingConfig = {
     mainHand: true,
 
     /**
+     * Emit light when holding a light source in the offhand / shield slot.
+     * Default: true
+     */
+    offhand: true,
+
+    /**
+     * Move held torches/lanterns to offhand on right-click in air.
+     * Default: true
+     */
+    allowOffhandEquipOnUse: true,
+
+    /**
+     * Require crouching/sneaking to move torches/lanterns to offhand.
+     * Default: false
+     */
+    requireSneakToEquip: false,
+
+    /**
+     * Place torches/lanterns from offhand by crouching and hitting/punching a block (sneak + hit).
+     * Avoids Bedrock client-side right-click prediction bug that turns stacked torches into 1.
+     * Default: true
+     */
+    allowOffhandPlacement: true,
+
+    /**
+     * Automatically merge fragmented torch/light item stacks in inventory.
+     * Default: true
+     */
+    autoMergeLightStacks: true,
+
+    /**
      * Tick interval for checking held light (4 ticks = 200ms).
      * Default: 4
      */

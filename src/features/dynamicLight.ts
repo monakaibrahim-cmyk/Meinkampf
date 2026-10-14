@@ -1,11 +1,14 @@
 import {
     Block,
     BlockPermutation,
+    Direction,
     EntityComponentTypes,
     EntityEquippableComponent,
+    EntityHitBlockAfterEvent,
     EquipmentSlot,
     GameMode,
     ItemStack,
+    ItemUseAfterEvent,
     Player,
     system,
     Vector3,
@@ -96,6 +99,25 @@ export const HELD_LIGHT_SOURCES: Record<string, number> = {
     "minecraft:totem_of_undying": 10,
 };
 
+/**
+ * Supported placeable light source items and their target block IDs.
+ */
+export const PLACEABLE_LIGHT_BLOCKS: Record<string, string> = {
+    "minecraft:torch": "minecraft:torch",
+    "minecraft:soul_torch": "minecraft:soul_torch",
+    "minecraft:redstone_torch": "minecraft:redstone_torch",
+    "minecraft:underwater_torch": "minecraft:underwater_torch",
+    "minecraft:colored_torch_blue": "minecraft:colored_torch_blue",
+    "minecraft:colored_torch_red": "minecraft:colored_torch_red",
+    "minecraft:colored_torch_green": "minecraft:colored_torch_green",
+    "minecraft:colored_torch_purple": "minecraft:colored_torch_purple",
+    "minecraft:lantern": "minecraft:lantern",
+    "minecraft:soul_lantern": "minecraft:soul_lantern",
+    "minecraft:sea_lantern": "minecraft:sea_lantern",
+    "minecraft:candle": "minecraft:candle",
+    "minecraft:end_rod": "minecraft:end_rod",
+};
+
 interface PlayerLightState {
     dimId: string;
     pos: Vector3;
@@ -145,17 +167,23 @@ function updatePlayerLight(player: Player): void {
     }
 
     let mainhandLight = 0;
+    let offhandLight = 0;
 
     try {
         const equippable = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
-        if (equippable && DynamicLightingConfig.mainHand) {
-            mainhandLight = getItemLightLevel(equippable.getEquipment(EquipmentSlot.Mainhand));
+        if (equippable) {
+            if (DynamicLightingConfig.mainHand) {
+                mainhandLight = getItemLightLevel(equippable.getEquipment(EquipmentSlot.Mainhand));
+            }
+            if (DynamicLightingConfig.offhand) {
+                offhandLight = getItemLightLevel(equippable.getEquipment(EquipmentSlot.Offhand));
+            }
         }
     } catch {
         // Equipment query safety
     }
 
-    const currentLight = mainhandLight;
+    const currentLight = Math.max(mainhandLight, offhandLight);
 
     if (currentLight === 0) {
         clearPlayerLight(player.id);
@@ -235,6 +263,395 @@ function updatePlayerLight(player: Player): void {
 }
 
 /**
+ * Checks whether an item type is a torch, lantern, or candle
+ * that is supported for right-click offhand equipping.
+ */
+export function isOffhandEquippableLight(typeId: string): boolean {
+    return (
+        typeId.includes("torch") ||
+        typeId.includes("lantern") ||
+        typeId.includes("candle")
+    );
+}
+
+const placementCooldown = new Set<string>();
+
+/**
+ * Calculates target location based on the face that was hit or targeted.
+ */
+function offsetLocationFromFace(blockLocation: Vector3, face: Direction | string): Vector3 | null {
+    const location: Vector3 = {
+        x: blockLocation.x,
+        y: blockLocation.y,
+        z: blockLocation.z,
+    };
+
+    switch (String(face)) {
+        case "Up":
+            location.y++;
+            break;
+        case "Down":
+            location.y--;
+            break;
+        case "North":
+            location.z--;
+            break;
+        case "South":
+            location.z++;
+            break;
+        case "East":
+            location.x++;
+            break;
+        case "West":
+            location.x--;
+            break;
+        default:
+            return null;
+    }
+
+    return location;
+}
+
+/**
+ * Resolves placement target and hit face from player view direction.
+ */
+function placementTargetFromView(player: Player): { block: Block; location: Vector3; face: string } | null {
+    let view;
+    try {
+        view = player.getBlockFromViewDirection({ maxDistance: 7 });
+    } catch {
+        return null;
+    }
+
+    if (!view?.block) return null;
+
+    const location = offsetLocationFromFace(view.block.location, view.face);
+    return location ? { block: view.block, location, face: String(view.face) } : null;
+}
+
+/**
+ * Resolves proper block permutation including wall/standing orientation for torches
+ * and hanging states for lanterns.
+ */
+function resolveLightPermutation(blockId: string, face: string): BlockPermutation | null {
+    try {
+        if (blockId.includes("torch")) {
+            if (face === "Down") return null; // Torches cannot hang from ceiling
+            const faceMap: Record<string, string> = {
+                Up: "top",
+                North: "north",
+                South: "south",
+                East: "east",
+                West: "west",
+            };
+            const dir = faceMap[face];
+            if (dir) {
+                return BlockPermutation.resolve(blockId, { torch_facing_direction: dir });
+            }
+        } else if (blockId.includes("lantern")) {
+            if (face === "Down") {
+                return BlockPermutation.resolve(blockId, { hanging: true });
+            } else if (face === "Up") {
+                return BlockPermutation.resolve(blockId, { hanging: false });
+            }
+        }
+    } catch {
+        // Fallback to default permutation if states resolution fails
+    }
+
+    try {
+        return BlockPermutation.resolve(blockId);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Safely updates or clears the offhand slot using Script API, falling back to
+ * `replaceitem` command for items that lack vanilla Bedrock `allow_off_hand`.
+ */
+function replaceOffhandSlot(
+    player: Player,
+    equippable: EntityEquippableComponent | undefined,
+    itemStack: ItemStack | undefined
+): boolean {
+    if (equippable) {
+        try {
+            const changed = equippable.setEquipment(
+                EquipmentSlot.Offhand,
+                itemStack ? itemStack.clone() : undefined
+            );
+            if (changed) return true;
+        } catch {
+            // Script API failed, try command fallback
+        }
+    }
+
+    try {
+        const command = itemStack
+            ? `replaceitem entity @s slot.weapon.offhand 0 ${itemStack.typeId} ${itemStack.amount}`
+            : "replaceitem entity @s slot.weapon.offhand 0 air";
+
+        const result = player.runCommand(command);
+        return Boolean(result && result.successCount > 0);
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Decrements offhand item stack size by 1 or clears if empty.
+ */
+function replaceOffhandAmount(
+    player: Player,
+    equippable: EntityEquippableComponent | undefined,
+    originalOffhand: ItemStack
+): boolean {
+    if (originalOffhand.amount <= 1) {
+        return replaceOffhandSlot(player, equippable, undefined);
+    }
+
+    const remaining = originalOffhand.clone();
+    remaining.amount -= 1;
+
+    return replaceOffhandSlot(player, equippable, remaining);
+}
+
+/**
+ * Places light block from offhand slot without triggering the client prediction stack reset bug.
+ */
+function placeOffhandLight(player: Player, targetLocation: Vector3, face: string): void {
+    if (placementCooldown.has(player.id)) return;
+    if (!DynamicLightingConfig.enabled || !DynamicLightingConfig.allowOffhandPlacement) return;
+    if (!player.isSneaking) return;
+
+    let equippable: EntityEquippableComponent | undefined;
+    let offhand: ItemStack | undefined;
+
+    try {
+        equippable = player.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
+        offhand = equippable?.getEquipment(EquipmentSlot.Offhand);
+    } catch {
+        return;
+    }
+
+    if (!equippable || !offhand) return;
+
+    const blockId = PLACEABLE_LIGHT_BLOCKS[offhand.typeId];
+    if (!blockId) return;
+
+    let targetBlock: Block | undefined;
+    let permutation: BlockPermutation | null = null;
+
+    try {
+        targetBlock = player.dimension.getBlock(targetLocation);
+        if (!targetBlock) return;
+        // Target block must be air or a dynamic light placeholder
+        if (!targetBlock.isAir && !targetBlock.typeId.startsWith("minecraft:light_block_")) {
+            return;
+        }
+        permutation = resolveLightPermutation(blockId, face);
+        if (!permutation) return;
+    } catch {
+        return;
+    }
+
+    const isCreative = player.getGameMode() === GameMode.Creative;
+    const originalOffhand = offhand.clone();
+
+    try {
+        if (!isCreative) {
+            const itemUpdated = replaceOffhandAmount(player, equippable, originalOffhand);
+            if (!itemUpdated) return;
+        }
+
+        try {
+            targetBlock.setPermutation(permutation);
+        } catch {
+            // Restore offhand stack if block placement failed
+            if (!isCreative) {
+                replaceOffhandSlot(player, equippable, originalOffhand);
+            }
+            return;
+        }
+
+        placementCooldown.add(player.id);
+        system.runTimeout(() => placementCooldown.delete(player.id), 2);
+    } catch {
+        if (!isCreative) {
+            try {
+                replaceOffhandSlot(player, equippable, originalOffhand);
+            } catch {
+                // Player or inventory became unavailable
+            }
+        }
+    }
+}
+
+/**
+ * Handles right-clicking with a light source looking at air to equip it to offhand.
+ */
+function handleItemUse(event: ItemUseAfterEvent): void {
+    const source = event.source;
+    if (!(source instanceof Player) || !event.itemStack) return;
+
+    if (!DynamicLightingConfig.enabled || !DynamicLightingConfig.allowOffhandEquipOnUse) return;
+    if (DynamicLightingConfig.requireSneakToEquip && !source.isSneaking) return;
+
+    const typeId = event.itemStack.typeId;
+    if (!isOffhandEquippableLight(typeId)) return;
+
+    let blockInView;
+    try {
+        blockInView = source.getBlockFromViewDirection({ maxDistance: 8 });
+    } catch {
+        return;
+    }
+
+    // Only equip to offhand when right-clicking into air
+    if (blockInView) return;
+
+    let equippable: EntityEquippableComponent | undefined;
+    let offhand: ItemStack | undefined;
+    let mainhand: ItemStack | undefined;
+
+    try {
+        equippable = source.getComponent(EntityComponentTypes.Equippable) as EntityEquippableComponent | undefined;
+        if (!equippable) return;
+        offhand = equippable.getEquipment(EquipmentSlot.Offhand);
+        mainhand = equippable.getEquipment(EquipmentSlot.Mainhand);
+    } catch {
+        return;
+    }
+
+    if (offhand || !mainhand || mainhand.typeId !== typeId) {
+        return;
+    }
+
+    const movedItem = mainhand.clone();
+
+    try {
+        const placedWithApi = equippable.setEquipment(EquipmentSlot.Offhand, movedItem);
+        if (placedWithApi) {
+            const removed = equippable.setEquipment(EquipmentSlot.Mainhand, undefined);
+            if (!removed) {
+                equippable.setEquipment(EquipmentSlot.Offhand, undefined);
+            }
+            return;
+        }
+
+        // Fallback for items that vanilla Bedrock doesn't normally allow in offhand
+        const result = source.runCommand(
+            `replaceitem entity @s slot.weapon.offhand 0 ${mainhand.typeId} ${mainhand.amount}`
+        );
+        if (!result || result.successCount < 1) {
+            return;
+        }
+
+        let removed = equippable.setEquipment(EquipmentSlot.Mainhand, undefined);
+        if (!removed) {
+            const inventory = source.getComponent(EntityComponentTypes.Inventory)?.container;
+            const selectedSlot = source.selectedSlotIndex;
+            const selectedItem = inventory?.getItem(selectedSlot);
+            if (inventory && selectedItem?.typeId === mainhand.typeId) {
+                inventory.setItem(selectedSlot, undefined);
+                removed = true;
+            }
+        }
+
+        if (!removed) {
+            source.runCommand("replaceitem entity @s slot.weapon.offhand 0 air");
+        }
+    } catch {
+        try {
+            source.runCommand("replaceitem entity @s slot.weapon.offhand 0 air");
+        } catch {
+            // Player or inventory became unavailable
+        }
+    }
+}
+
+/**
+ * Handles crouching and punching/hitting a block to place light block from offhand.
+ */
+function handleHitBlock(event: EntityHitBlockAfterEvent): void {
+    const player = event.damagingEntity;
+    if (!(player instanceof Player)) return;
+
+    if (!DynamicLightingConfig.enabled || !DynamicLightingConfig.allowOffhandPlacement) {
+        return;
+    }
+
+    if (!player.isSneaking) return;
+
+    let hitBlock = event.hitBlock;
+    let face = String(event.blockFace);
+
+    if (!face || face === "undefined") {
+        const target = placementTargetFromView(player);
+        if (target) {
+            hitBlock = target.block;
+            face = target.face;
+        }
+    }
+
+    if (!hitBlock || !face) return;
+
+    const targetLoc = offsetLocationFromFace(hitBlock.location, face);
+    if (targetLoc) {
+        placeOffhandLight(player, targetLoc, face);
+    }
+}
+
+/**
+ * Automatically merges partial stacks of light source items in player inventory.
+ */
+export function mergeSupportedLightStacks(player: Player): void {
+    if (!DynamicLightingConfig.autoMergeLightStacks) return;
+    try {
+        const inventory = player.getComponent(EntityComponentTypes.Inventory)?.container;
+        if (!inventory) return;
+
+        for (let targetSlot = 0; targetSlot < inventory.size; targetSlot++) {
+            const target = inventory.getItem(targetSlot);
+            if (!target || target.maxAmount <= 1 || !(target.typeId in HELD_LIGHT_SOURCES)) {
+                continue;
+            }
+
+            for (let sourceSlot = targetSlot + 1; sourceSlot < inventory.size; sourceSlot++) {
+                const source = inventory.getItem(sourceSlot);
+                if (!source) continue;
+
+                let stackable = false;
+                try {
+                    stackable = target.isStackableWith(source);
+                } catch {
+                    continue;
+                }
+
+                if (!stackable) continue;
+
+                const availableSpace = target.maxAmount - target.amount;
+                if (availableSpace <= 0) break;
+
+                const amountToMove = Math.min(availableSpace, source.amount);
+                target.amount += amountToMove;
+                inventory.setItem(targetSlot, target);
+
+                if (amountToMove >= source.amount) {
+                    inventory.setItem(sourceSlot, undefined);
+                } else {
+                    source.amount -= amountToMove;
+                    inventory.setItem(sourceSlot, source);
+                }
+            }
+        }
+    } catch {
+        // Inventory safety
+    }
+}
+
+/**
  * Initializes the lightweight Dynamic Lighting feature.
  */
 export function initDynamicLightingFeature(): void {
@@ -243,19 +660,33 @@ export function initDynamicLightingFeature(): void {
         return;
     }
 
-    // Periodic light update loop
+    // Periodic light update and stack merge loop
     const intervalTicks = DynamicLightingConfig.updateIntervalTicks ?? 4;
+    let mergeTicks = 0;
 
     system.runInterval(() => {
         try {
             const players = world.getAllPlayers();
+            mergeTicks += intervalTicks;
+            const shouldMerge = mergeTicks >= 20 && DynamicLightingConfig.autoMergeLightStacks;
+            if (shouldMerge) {
+                mergeTicks = 0;
+            }
+
             for (const player of players) {
                 updatePlayerLight(player);
+                if (shouldMerge) {
+                    mergeSupportedLightStacks(player);
+                }
             }
         } catch {
             // Player query safety
         }
     }, intervalTicks);
+
+    // Event listeners for offhand equipping & placement
+    world.afterEvents.itemUse.subscribe(handleItemUse);
+    world.afterEvents.entityHitBlock.subscribe(handleHitBlock);
 
     // Clean up light blocks on player leave, dimension change, death, or respawn
     world.afterEvents.playerLeave.subscribe((event) => {

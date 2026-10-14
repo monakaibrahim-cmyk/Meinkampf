@@ -158,40 +158,76 @@ function generateAddonChangelog(version, repo, prevTag) {
 }
 
 /**
- * Calculates the sequential beta/alpha build number for a specific version.
- * When the version in package.json changes (e.g. 1.0.3 -> 1.0.4), the counter
- * automatically reverts back to 1 for the new version.
+ * Checks if a commit message indicates an experimental or new feature.
  */
-function getBetaBuildNumber(version) {
-    if (process.env.BETA_NUMBER) {
+function isFeatureOrExperimental(subject) {
+    if (!subject || typeof subject !== "string") return false;
+    const s = subject.trim();
+    return (
+        /^feat(\(.*\))?:/i.test(s) ||
+        /experimental/i.test(s) ||
+        /^feature(\(.*\))?:/i.test(s) ||
+        /\b(feat|feature|experiment|experimental)\b/i.test(s)
+    );
+}
+
+/**
+ * Calculates separate sequential build numbers for Alpha and Beta channels.
+ * - Alpha build numbers count experimental/feature commits for this version.
+ * - Beta build numbers count bug fix/improvement commits for this version.
+ * When the version in package.json changes, both alpha and beta counters revert to 1.
+ */
+function getChannelBuildNumber(version, channel) {
+    if (channel === "alpha" && process.env.ALPHA_NUMBER) {
+        const parsed = parseInt(process.env.ALPHA_NUMBER, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    if (channel === "beta" && process.env.BETA_NUMBER) {
         const parsed = parseInt(process.env.BETA_NUMBER, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    if (process.env.BUILD_NUMBER) {
+        const parsed = parseInt(process.env.BUILD_NUMBER, 10);
         if (!isNaN(parsed) && parsed > 0) return parsed;
     }
 
     try {
-        // Find the initial commit on current branch that set this version in package.json
         const logCmd = `git log -S '"version": "${version}"' --reverse --pretty=format:%H package.json`;
         const output = execSync(logCmd, { encoding: "utf8" }).trim();
         if (output) {
             const bumpCommit = output.split("\n")[0].trim();
             if (bumpCommit) {
-                const countStr = execSync(`git rev-list --count ${bumpCommit}..HEAD`, { encoding: "utf8" }).trim();
-                const count = parseInt(countStr, 10);
-                if (!isNaN(count)) {
-                    return count + 1;
+                let range = `${bumpCommit}..HEAD`;
+                try {
+                    execSync(`git rev-parse --verify "${bumpCommit}^"`, { stdio: "ignore" });
+                    range = `${bumpCommit}^..HEAD`;
+                } catch {
+                    range = `${bumpCommit}..HEAD`;
+                }
+
+                const rawCommits = execSync(`git log ${range} --pretty=format:'%H|%s'`, { encoding: "utf8" }).trim();
+                if (rawCommits) {
+                    const commits = rawCommits.split("\n").filter(Boolean).map((line) => {
+                        const [hash, ...subjParts] = line.split("|");
+                        return { hash, subject: subjParts.join("|") };
+                    });
+
+                    let channelCount = 0;
+                    for (const c of commits) {
+                        const isFeat = isFeatureOrExperimental(c.subject);
+                        if (channel === "alpha" && isFeat) {
+                            channelCount++;
+                        } else if (channel === "beta" && !isFeat) {
+                            if (c.hash.startsWith(bumpCommit) && commits.length > 1) {
+                                continue;
+                            }
+                            channelCount++;
+                        }
+                    }
+
+                    if (channelCount > 0) return channelCount;
                 }
             }
-        }
-    } catch {
-        // Fallback
-    }
-
-    // Fallback: count commits on development ahead of main
-    try {
-        const aheadStr = execSync("git rev-list --count origin/main..HEAD 2>/dev/null || git rev-list --count main..HEAD 2>/dev/null", { encoding: "utf8" }).trim();
-        const ahead = parseInt(aheadStr, 10);
-        if (!isNaN(ahead) && ahead > 0) {
-            return ahead;
         }
     } catch {
         // Fallback
@@ -212,17 +248,6 @@ function determineReleaseChannel(commits, refName) {
         const explicit = process.env.RELEASE_CHANNEL.toLowerCase();
         if (explicit === "alpha" || explicit === "beta") return explicit;
     }
-
-    const isFeatureOrExperimental = (subject) => {
-        if (!subject || typeof subject !== "string") return false;
-        const s = subject.trim();
-        return (
-            /^feat(\(.*\))?:/i.test(s) ||
-            /experimental/i.test(s) ||
-            /^feature(\(.*\))?:/i.test(s) ||
-            /\b(feat|feature|experiment|experimental)\b/i.test(s)
-        );
-    };
 
     if (Array.isArray(commits) && commits.length > 0) {
         const hasFeature = commits.some((c) => isFeatureOrExperimental(c.subject));
@@ -296,7 +321,7 @@ function getMetadata() {
 
         // 3. Smart filter: experimental/new features -> Alpha, fixes -> Beta
         channel = determineReleaseChannel(addonCommits.length > 0 ? addonCommits : (latestAddon ? [latestAddon] : []), refName);
-        const buildNum = getBetaBuildNumber(version);
+        const buildNum = getChannelBuildNumber(version, channel);
         tag = `v${version}-${channel}.${buildNum}`;
         const channelDisplayName = channel === "alpha" ? "Alpha" : "Beta";
         title = `Bedrock QoL Suite v${version} (${channelDisplayName} #${buildNum})`;
