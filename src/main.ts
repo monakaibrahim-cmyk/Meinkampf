@@ -21,6 +21,7 @@ import { initAfkProtectionFeature } from "./features/afkProtection";
 import { initSmartElytraFeature } from "./features/smartElytra";
 import { initAutoEatFeature } from "./features/autoEat";
 import { initDeathChestFeature } from "./features/deathChest";
+import { initUnbreakableAnvilFeature } from "./features/unbreakableAnvil";
 
 // Initialize Features
 initFarmingFeature();
@@ -42,6 +43,7 @@ initAfkProtectionFeature();
 initSmartElytraFeature();
 initAutoEatFeature();
 initDeathChestFeature();
+initUnbreakableAnvilFeature();
 
 // Clear any residual titles / subtitles on player spawn to ensure HUD is completely clean
 world.afterEvents.playerSpawn.subscribe((event) => {

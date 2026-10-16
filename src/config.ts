@@ -1793,3 +1793,69 @@ export const DeathChestConfig = {
      */
     playReclaimEffects: true,
 };
+
+export const AnvilConfig = {
+    /**
+     * Enable Anvil Quality of Life features: Unbreakable Anvils & "Too Expensive!" Cap Removal.
+     * Default: true
+     */
+    enabled: true,
+
+    /**
+     * Unbreakable Anvils:
+     * - Anvils never degrade into chipped_anvil or damaged_anvil upon use.
+     * - Anvils never break from wear and tear.
+     * - Chipped or damaged anvils interacted with or placed are automatically restored to pristine condition.
+     * - Protects anvils from Creeper, TNT, and other explosions.
+     * Default: true
+     */
+    unbreakable: true,
+
+    /**
+     * Remove "Too Expensive!" Cap:
+     * - Automatically purges the accumulated Prior Work Penalty (RepairCost) on tools, armor, weapons, and enchanted books.
+     * - Prevents the anvil from locking items at 40+ levels with "Too Expensive!".
+     * - Allows items to be repaired, combined, and renamed infinitely.
+     * Default: true
+     */
+    removeTooExpensiveCap: true,
+
+    /**
+     * Auto Purge Prior Work Penalty:
+     * Automatically purges Prior Work Penalty whenever a player interacts with an anvil.
+     * All items in the player's inventory and equipped armor are cleansed of Prior Work Penalty
+     * before placing them into anvil slots, ensuring operations never exceed the 39-level limit.
+     * Default: true
+     */
+    autoPurgeOnAnvilInteract: true,
+
+    /**
+     * Sneak-Interact Purification:
+     * Sneak and right-click (interact) an anvil with a held item to instantly purify its Prior Work Penalty to 0.
+     * If the player's hand is empty, purifies all eligible gear in inventory and equipped armor.
+     * Plays a satisfying hammer chime and particle effect.
+     * Default: true
+     */
+    sneakInteractPurify: true,
+
+    /**
+     * Protect Anvils from Explosions:
+     * Prevents TNT, Creepers, Ghasts, and Withers from destroying placed anvils.
+     * Default: true
+     */
+    protectFromExplosions: true,
+
+    /**
+     * Sound and Particle Effects:
+     * Plays chime sounds and sparkle particles when anvils are restored or items are purified.
+     * Default: true
+     */
+    playEffects: true,
+
+    /**
+     * Action Bar Notifications:
+     * Displays clean notifications when items are purified or anvils restored.
+     * Default: true
+     */
+    showNotifications: true,
+};
