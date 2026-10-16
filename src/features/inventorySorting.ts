@@ -14,6 +14,7 @@ import {
     EntityInventoryComponent,
     EntityEquippableComponent,
     EquipmentSlot,
+    Vector3,
 } from "@minecraft/server";
 import { ActionFormData, ActionFormResponse, FormCancelationReason } from "@minecraft/server-ui";
 import { InventorySortingConfig } from "../config";
@@ -114,41 +115,46 @@ export function isSorterItem(item?: ItemStack): boolean {
  * hoppers, crafters, lecterns, chiseled bookshelves, and any other non-pure-storage container.
  */
 export function isContainerBlock(block: Block): boolean {
-    const typeId = block.typeId;
+    try {
+        if (!block || !block.isValid) return false;
+        const typeId = block.typeId;
 
-    // Explicitly reject any furnace, smoker, cooking, redstone, or functional station
-    if (
-        typeId.includes("furnace") ||
-        typeId.includes("smoker") ||
-        typeId.includes("brewing_stand") ||
-        typeId.includes("dispenser") ||
-        typeId.includes("dropper") ||
-        typeId.includes("hopper") ||
-        typeId.includes("crafter") ||
-        typeId.includes("bookshelf") ||
-        typeId.includes("campfire") ||
-        typeId.includes("lectern") ||
-        typeId.includes("jukebox") ||
-        typeId.includes("ender_chest")
-    ) {
+        // Explicitly reject any furnace, smoker, cooking, redstone, or functional station
+        if (
+            typeId.includes("furnace") ||
+            typeId.includes("smoker") ||
+            typeId.includes("brewing_stand") ||
+            typeId.includes("dispenser") ||
+            typeId.includes("dropper") ||
+            typeId.includes("hopper") ||
+            typeId.includes("crafter") ||
+            typeId.includes("bookshelf") ||
+            typeId.includes("campfire") ||
+            typeId.includes("lectern") ||
+            typeId.includes("jukebox") ||
+            typeId.includes("ender_chest")
+        ) {
+            return false;
+        }
+
+        // Only allow standard chests, trapped chests, barrels, and shulker boxes
+        const isStorageType =
+            (typeId.includes("chest") && !typeId.includes("ender_chest")) ||
+            typeId.includes("barrel") ||
+            typeId.includes("shulker_box");
+
+        if (!isStorageType) {
+            return false;
+        }
+
+        const inv =
+            (block.getComponent(BlockComponentTypes.Inventory) as BlockInventoryComponent | undefined) ??
+            (block.getComponent("inventory") as BlockInventoryComponent | undefined) ??
+            (block.getComponent("minecraft:inventory") as BlockInventoryComponent | undefined);
+        return !!(inv && inv.container);
+    } catch {
         return false;
     }
-
-    // Only allow standard chests, trapped chests, barrels, and shulker boxes
-    const isStorageType =
-        (typeId.includes("chest") && !typeId.includes("ender_chest")) ||
-        typeId.includes("barrel") ||
-        typeId.includes("shulker_box");
-
-    if (!isStorageType) {
-        return false;
-    }
-
-    const inv =
-        (block.getComponent(BlockComponentTypes.Inventory) as BlockInventoryComponent | undefined) ??
-        (block.getComponent("inventory") as BlockInventoryComponent | undefined) ??
-        (block.getComponent("minecraft:inventory") as BlockInventoryComponent | undefined);
-    return !!(inv && inv.container);
 }
 
 /**
@@ -402,7 +408,7 @@ export function initInventorySortingFeature(): void {
         }
     });
 
-    // 2. Right-clicking with Sorter item in air (ItemUse)
+    // 2. Right-clicking with Sorter item (ItemUse)
     world.afterEvents.itemUse.subscribe((event) => {
         try {
             if (!InventorySortingConfig.useSorterItem) return;
@@ -411,12 +417,11 @@ export function initInventorySortingFeature(): void {
             const player = event.source;
             if (!player || !player.isValid) return;
 
-            // If player recently clicked a block, ignore itemUse (block interaction takes precedence)
+            // If player recently clicked a block interaction, suppress duplicate event
             const lastBlockTime = playerLastBlockInteract.get(player.id) ?? 0;
             if (Date.now() - lastBlockTime < 350) return;
 
-            // Check if player is directly targeting a block within reach:
-            // If aiming at any block within 4.5 blocks, this was a block click, NOT an air click!
+            // Check if player is directly targeting a container within reach (4.5 blocks)
             let hit;
             try {
                 hit = player.getBlockFromViewDirection({ maxDistance: 4.5 });
@@ -424,49 +429,60 @@ export function initInventorySortingFeature(): void {
                 // Ignore
             }
 
-            if (hit && hit.block) {
-                // If aiming at a valid container, open container sorter
-                if (isContainerBlock(hit.block)) {
-                    const connected = InventorySortingConfig.sortDoubleChestsTogether
-                        ? getConnectedChests(hit.block)
-                        : [hit.block];
-                    openContainerSorterForm(player, connected);
-                }
-                // If aiming at non-container block (leaves, dirt, stone, crafting table), DO NOTHING
+            if (hit && hit.block && isContainerBlock(hit.block)) {
+                const connected = InventorySortingConfig.sortDoubleChestsTogether
+                    ? getConnectedChests(hit.block)
+                    : [hit.block];
+                openContainerSorterForm(player, connected);
                 return;
             }
 
-            // In thin air with no block in view: open backpack sorter form
+            // In all other cases (thin air or looking at non-container block): open backpack sorter form
             openBackpackSorterForm(player);
         } catch {
             // Ignore
         }
     });
 
-    // Automatically sort containers when closed
+    // 3. Automatically sort containers when closed (deferred to next tick to ensure container is fully unlocked)
     world.afterEvents.blockContainerClosed.subscribe((event) => {
         try {
             if (!InventorySortingConfig.autoSortOnClose) return;
             const block = event.block;
-            if (!block || !isContainerBlock(block)) return;
+            if (!block || !block.isValid) return;
 
-            const connected = InventorySortingConfig.sortDoubleChestsTogether
-                ? getConnectedChests(block)
-                : [block];
-            const refs = getBlockSlotRefs(connected);
-            if (refs.length > 0) {
-                const count = performSort(refs, InventorySortingConfig.defaultSortType);
-                const player = event.closeSource?.entity as Player | undefined;
-                if (player && player.isValid && count > 0 && InventorySortingConfig.showNotification) {
-                    showPlayerNotification(player, `§a✔ Container auto-sorted by §l${InventorySortingConfig.defaultSortType}§r§a!`);
+            const dimId = block.dimension.id;
+            const loc = { x: Math.floor(block.location.x), y: Math.floor(block.location.y), z: Math.floor(block.location.z) };
+            const player = event.closeSource?.entity as Player | undefined;
+
+            // Defer execution to the next tick when container is completely closed and unlocked
+            system.run(() => {
+                try {
+                    const dim = world.getDimension(dimId);
+                    if (!dim) return;
+                    const freshBlock = dim.getBlock(loc);
+                    if (!freshBlock || !isContainerBlock(freshBlock)) return;
+
+                    const connected = InventorySortingConfig.sortDoubleChestsTogether
+                        ? getConnectedChests(freshBlock)
+                        : [freshBlock];
+                    const refs = getBlockSlotRefs(connected);
+                    if (refs.length > 0) {
+                        const count = performSort(refs, InventorySortingConfig.defaultSortType);
+                        if (player && player.isValid && count > 0 && InventorySortingConfig.showNotification) {
+                            showPlayerNotification(player, `§a✔ Container auto-sorted by §l${InventorySortingConfig.defaultSortType}§r§a!`);
+                        }
+                    }
+                } catch {
+                    // Ignore
                 }
-            }
+            });
         } catch {
             // Ignore
         }
     });
 
-    // Handle block interaction (sorter item or empty hand)
+    // 5. Handle block interaction (sorter item on container, or empty hand on ground)
     world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
         try {
             // Only process the first interaction event per click (prevents multiple triggers)
@@ -480,7 +496,7 @@ export function initInventorySortingFeature(): void {
             const mainhandItem = equippable?.getEquipment(EquipmentSlot.Mainhand);
             const holdingSorter = isSorterItem(event.itemStack) || isSorterItem(mainhandItem);
 
-            // Record block interaction timestamp to suppress duplicate itemUse air events
+            // Record block interaction timestamp
             if (holdingSorter) {
                 playerLastBlockInteract.set(player.id, Date.now());
             }
@@ -495,9 +511,8 @@ export function initInventorySortingFeature(): void {
                             : [block];
                         openContainerSorterForm(player, connected);
                     });
+                    return;
                 }
-                // When interacting with non-container blocks (leaves, dirt, wood, doors), DO NOT open backpack form!
-                return;
             }
 
             // Empty hand interact on ground (open backpack sorter)
@@ -577,31 +592,49 @@ export function initInventorySortingFeature(): void {
  * Detects connected chest pairs (Double Chests) to handle combined inventory.
  */
 function getConnectedChests(block: Block): Block[] {
-    const typeId = block.typeId;
-    if (typeId !== "minecraft:chest" && typeId !== "minecraft:trapped_chest") {
-        return [block];
-    }
-    const dim = block.dimension;
-    const { x, y, z } = block.location;
-    const candidates = [
-        dim.getBlock({ x: x + 1, y, z }),
-        dim.getBlock({ x: x - 1, y, z }),
-        dim.getBlock({ x, y, z: z + 1 }),
-        dim.getBlock({ x, y, z: z - 1 }),
-    ];
+    try {
+        if (!block || !block.isValid) return [block];
+        const typeId = block.typeId;
+        if (typeId !== "minecraft:chest" && typeId !== "minecraft:trapped_chest") {
+            return [block];
+        }
+        const dim = block.dimension;
+        const { x, y, z } = block.location;
+        const dir = block.permutation.getState("minecraft:cardinal_direction");
 
-    for (const neighbor of candidates) {
-        if (neighbor && neighbor.typeId === typeId) {
-            try {
-                const dir1 = block.permutation.getState("minecraft:cardinal_direction");
-                const dir2 = neighbor.permutation.getState("minecraft:cardinal_direction");
-                if (dir1 !== undefined && dir1 === dir2) {
+        // Connected double chests are placed side-by-side perpendicular to facing direction
+        let candidates: (Block | undefined)[] = [];
+        if (dir === "north" || dir === "south") {
+            // Facing Z axis -> neighbor must be along X axis (east/west)
+            candidates = [
+                dim.getBlock({ x: x + 1, y, z }),
+                dim.getBlock({ x: x - 1, y, z }),
+            ];
+        } else if (dir === "east" || dir === "west") {
+            // Facing X axis -> neighbor must be along Z axis (north/south)
+            candidates = [
+                dim.getBlock({ x, y, z: z + 1 }),
+                dim.getBlock({ x, y, z: z - 1 }),
+            ];
+        } else {
+            candidates = [
+                dim.getBlock({ x: x + 1, y, z }),
+                dim.getBlock({ x: x - 1, y, z }),
+                dim.getBlock({ x, y, z: z + 1 }),
+                dim.getBlock({ x, y, z: z - 1 }),
+            ];
+        }
+
+        for (const neighbor of candidates) {
+            if (neighbor && neighbor.isValid && neighbor.typeId === typeId) {
+                const neighborDir = neighbor.permutation.getState("minecraft:cardinal_direction");
+                if (dir === neighborDir) {
                     return [block, neighbor];
                 }
-            } catch {
-                return [block, neighbor];
             }
         }
+    } catch {
+        // Fallback
     }
     return [block];
 }
@@ -613,7 +646,7 @@ function getBlockSlotRefs(blocks: Block[]): SlotRef[] {
     const refs: SlotRef[] = [];
     for (const b of blocks) {
         const container = getBlockContainer(b);
-        if (container) {
+        if (container && container.isValid) {
             for (let i = 0; i < container.size; i++) {
                 refs.push({ container, slot: i });
             }
@@ -628,7 +661,7 @@ function getBlockSlotRefs(blocks: Block[]): SlotRef[] {
 function getPlayerSlotRefs(player: Player, includeHotbar: boolean): SlotRef[] {
     const refs: SlotRef[] = [];
     const container = getPlayerContainer(player);
-    if (container) {
+    if (container && container.isValid) {
         const startSlot = includeHotbar ? 0 : 9;
         const endSlot = container.size;
         for (let i = startSlot; i < endSlot; i++) {
@@ -639,17 +672,55 @@ function getPlayerSlotRefs(player: Player, includeHotbar: boolean): SlotRef[] {
 }
 
 /**
+ * Safely re-fetches live, valid container slot references from dimension and block locations.
+ * Prevents native handle expiration between form display and user button selection.
+ */
+function getFreshContainerSlotRefs(dimensionId: string, locations: Vector3[]): SlotRef[] {
+    try {
+        const dim = world.getDimension(dimensionId);
+        if (!dim) return [];
+        const refs: SlotRef[] = [];
+        for (const loc of locations) {
+            try {
+                const b = dim.getBlock(loc);
+                if (b && b.isValid) {
+                    const container = getBlockContainer(b);
+                    if (container && container.isValid) {
+                        for (let i = 0; i < container.size; i++) {
+                            refs.push({ container, slot: i });
+                        }
+                    }
+                }
+            } catch {
+                // Ignore
+            }
+        }
+        return refs;
+    } catch {
+        return [];
+    }
+}
+
+/**
  * Displays the Container Sorter menu with icon buttons and sort choices.
  */
 export function openContainerSorterForm(player: Player, containerBlocks: Block[]): void {
-    const refs = getBlockSlotRefs(containerBlocks);
-    if (refs.length === 0) return;
+    if (!containerBlocks || containerBlocks.length === 0) return;
+    const initialRefs = getBlockSlotRefs(containerBlocks);
+    if (initialRefs.length === 0) return;
+
+    const dimId = containerBlocks[0].dimension.id;
+    const locs: Vector3[] = containerBlocks.map((b) => ({
+        x: Math.floor(b.location.x),
+        y: Math.floor(b.location.y),
+        z: Math.floor(b.location.z),
+    }));
 
     const isDouble = containerBlocks.length > 1;
     const title = isDouble ? "§l§2Double Chest Sorter" : "§l§2Container Sorter";
     const form = new ActionFormData()
         .title(title)
-        .body(`§7Choose a sorting method for this container:\n§8Total Capacity: §a${refs.length} slots`)
+        .body(`§7Choose a sorting method for this container:\n§8Total Capacity: §a${initialRefs.length} slots`)
         .button("§l§1Category / Type§r\n§8Tools, Armor, Ores, Blocks...", "textures/items/iron_pickaxe")
         .button("§l§5Quality / Tier§r\n§8Netherite, Diamond, Enchanted...", "textures/items/netherite_sword")
         .button("§l§6Alphabetical (A-Z)§r\n§8Sort names alphabetically", "textures/items/book_normal")
@@ -658,16 +729,20 @@ export function openContainerSorterForm(player: Player, containerBlocks: Block[]
         .button("§l§bSort Backpack§r\n§8Clean your player inventory", "textures/ui/inventory_icon");
 
     showActionFormSafe(player, form, (selection) => {
+        // Re-acquire fresh, valid container slot references upon button press
+        const freshRefs = getFreshContainerSlotRefs(dimId, locs);
+        if (freshRefs.length === 0) return;
+
         if (selection === 0) {
-            sortAndNotify(player, refs, "category", "Category");
+            sortAndNotify(player, freshRefs, "category", "Category");
         } else if (selection === 1) {
-            sortAndNotify(player, refs, "quality", "Quality & Tier");
+            sortAndNotify(player, freshRefs, "quality", "Quality & Tier");
         } else if (selection === 2) {
-            sortAndNotify(player, refs, "alphabetical", "Alphabetical (A-Z)");
+            sortAndNotify(player, freshRefs, "alphabetical", "Alphabetical (A-Z)");
         } else if (selection === 3) {
-            sortAndNotify(player, refs, "quantity", "Quantity");
+            sortAndNotify(player, freshRefs, "quantity", "Quantity");
         } else if (selection === 4) {
-            sortAndNotify(player, refs, "compact", "Compact & Merge");
+            sortAndNotify(player, freshRefs, "compact", "Compact & Merge");
         } else if (selection === 5) {
             system.run(() => {
                 openBackpackSorterForm(player);
@@ -682,6 +757,27 @@ export function openContainerSorterForm(player: Player, containerBlocks: Block[]
 export function openBackpackSorterForm(player: Player): void {
     const isHotbarProtected = playerHotbarProtected.get(player.id) ?? InventorySortingConfig.protectHotbarByDefault;
     const refs = getPlayerSlotRefs(player, !isHotbarProtected);
+
+    // Check if player is directly aiming at a container within reach (5 blocks)
+    let targetedContainer: Block | undefined;
+    try {
+        const hit = player.getBlockFromViewDirection({ maxDistance: 5 });
+        if (hit && hit.block && isContainerBlock(hit.block)) {
+            targetedContainer = hit.block;
+        }
+    } catch {
+        // Ignore
+    }
+
+    const targetDimId = targetedContainer?.dimension.id;
+    const targetLoc: Vector3 | undefined = targetedContainer
+        ? {
+              x: Math.floor(targetedContainer.location.x),
+              y: Math.floor(targetedContainer.location.y),
+              z: Math.floor(targetedContainer.location.z),
+          }
+        : undefined;
+
     const form = new ActionFormData()
         .title("§l§2Backpack Sorter")
         .body(
@@ -702,21 +798,39 @@ export function openBackpackSorterForm(player: Player): void {
             isHotbarProtected ? "textures/items/diamond_sword" : "textures/items/iron_sword"
         );
 
+    if (targetedContainer) {
+        form.button("§l§2Sort Targeted Chest§r\n§8Sort container in front of you", "textures/blocks/chest_front");
+    }
+
     showActionFormSafe(player, form, (selection) => {
+        // Re-acquire fresh player container slot references upon button selection
+        const freshPlayerRefs = getPlayerSlotRefs(player, !isHotbarProtected);
+
         if (selection === 0) {
-            sortAndNotify(player, refs, "category", "Category");
+            sortAndNotify(player, freshPlayerRefs, "category", "Category");
         } else if (selection === 1) {
-            sortAndNotify(player, refs, "quality", "Quality & Tier");
+            sortAndNotify(player, freshPlayerRefs, "quality", "Quality & Tier");
         } else if (selection === 2) {
-            sortAndNotify(player, refs, "alphabetical", "Alphabetical (A-Z)");
+            sortAndNotify(player, freshPlayerRefs, "alphabetical", "Alphabetical (A-Z)");
         } else if (selection === 3) {
-            sortAndNotify(player, refs, "quantity", "Quantity");
+            sortAndNotify(player, freshPlayerRefs, "quantity", "Quantity");
         } else if (selection === 4) {
-            sortAndNotify(player, refs, "compact", "Compact & Merge");
+            sortAndNotify(player, freshPlayerRefs, "compact", "Compact & Merge");
         } else if (selection === 5) {
             playerHotbarProtected.set(player.id, !isHotbarProtected);
             system.run(() => {
                 openBackpackSorterForm(player);
+            });
+        } else if (selection === 6 && targetDimId && targetLoc) {
+            system.run(() => {
+                const dim = world.getDimension(targetDimId);
+                const freshTarget = dim?.getBlock(targetLoc);
+                if (freshTarget && freshTarget.isValid && isContainerBlock(freshTarget)) {
+                    const connected = InventorySortingConfig.sortDoubleChestsTogether
+                        ? getConnectedChests(freshTarget)
+                        : [freshTarget];
+                    openContainerSorterForm(player, connected);
+                }
             });
         }
     });
@@ -873,8 +987,35 @@ function performSort(refs: SlotRef[], sortType: SortType): number {
     // 4. Write back to container slots
     for (let i = 0; i < refs.length; i++) {
         const ref = refs[i];
+        if (!ref.container || !ref.container.isValid) continue;
+
         const newItem = rawItems[i];
-        ref.container.setItem(ref.slot, newItem);
+        try {
+            const currentItem = ref.container.getItem(ref.slot);
+            if (newItem) {
+                // Skip writing if slot already has identical item
+                if (
+                    currentItem &&
+                    currentItem.typeId === newItem.typeId &&
+                    currentItem.amount === newItem.amount &&
+                    currentItem.nameTag === newItem.nameTag
+                ) {
+                    continue;
+                }
+                ref.container.setItem(ref.slot, newItem);
+            } else {
+                // Clear slot if currently occupied
+                if (currentItem !== undefined) {
+                    ref.container.setItem(ref.slot, undefined);
+                }
+            }
+        } catch {
+            try {
+                ref.container.setItem(ref.slot, undefined);
+            } catch {
+                // Ignore slot write error
+            }
+        }
     }
 
     return rawItems.length;

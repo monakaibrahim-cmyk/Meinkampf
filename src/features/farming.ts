@@ -1238,7 +1238,13 @@ function scanFarmlandsInArea(dimension: Dimension, center: Vector3, radius: numb
                     } else if (block.typeId === "minecraft:kelp" || block.typeId === "minecraft:kelp_plant") {
                         const below = dimension.getBlock({ x, y: y - 1, z });
                         if (!below || (below.typeId !== "minecraft:kelp" && below.typeId !== "minecraft:kelp_plant")) {
-                            registerStalkCrop(dimension.id, { x, y, z }, "minecraft:kelp");
+                            // Only register kelp if planted on solid ground submerged in water (never in air)
+                            if (below && below.typeId !== "minecraft:air" && below.typeId !== "minecraft:water") {
+                                const above = dimension.getBlock({ x, y: y + 1, z });
+                                if (above && (above.typeId === "minecraft:water" || above.typeId === "minecraft:kelp" || above.typeId === "minecraft:kelp_plant")) {
+                                    registerStalkCrop(dimension.id, { x, y, z }, "minecraft:kelp");
+                                }
+                            }
                         }
                     } else if (block.typeId === "minecraft:cocoa") {
                         registerFarmland(dimension.id, pos, "minecraft:cocoa", "age", block.permutation.getState("age") as number ?? 0);
@@ -1344,7 +1350,9 @@ function processFastGrowth(dimension: Dimension): void {
                         const nextBlock = dimension.getBlock(nextPos);
                         const canGrow =
                             nextBlock &&
-                            (nextBlock.isAir || (stalkDef.typeId === "minecraft:kelp" && nextBlock.typeId === "minecraft:water"));
+                            (stalkDef.typeId === "minecraft:kelp"
+                                ? nextBlock.typeId === "minecraft:water"
+                                : nextBlock.isAir);
 
                         if (canGrow) {
                             nextBlock.setPermutation(BlockPermutation.resolve(stalkDef.typeId));
@@ -1567,6 +1575,42 @@ function processFastGrowth(dimension: Dimension): void {
 }
 
 /**
+ * Determines whether a harvested kelp stalk block should revert to a water block or air.
+ * Prevents sky water towers by only restoring water if the position is within an actual body of water.
+ */
+function shouldKelpRevertToWater(dimension: Dimension, pos: Vector3): boolean {
+    const above = dimension.getBlock({ x: pos.x, y: pos.y + 1, z: pos.z });
+    if (above && (above.typeId === "minecraft:water" || above.typeId === "minecraft:kelp" || above.typeId === "minecraft:kelp_plant")) {
+        return true;
+    }
+
+    const north = dimension.getBlock({ x: pos.x, y: pos.y, z: pos.z - 1 })?.typeId;
+    const south = dimension.getBlock({ x: pos.x, y: pos.y, z: pos.z + 1 })?.typeId;
+    const east = dimension.getBlock({ x: pos.x + 1, y: pos.y, z: pos.z })?.typeId;
+    const west = dimension.getBlock({ x: pos.x - 1, y: pos.y, z: pos.z })?.typeId;
+
+    if (
+        north === "minecraft:water" ||
+        south === "minecraft:water" ||
+        east === "minecraft:water" ||
+        west === "minecraft:water"
+    ) {
+        return true;
+    }
+
+    const below = dimension.getBlock({ x: pos.x, y: pos.y - 1, z: pos.z })?.typeId;
+    const isBelowWater = below === "minecraft:water" || below === "minecraft:kelp" || below === "minecraft:kelp_plant";
+    if (isBelowWater) {
+        const hasSolidEnclosure = [north, south, east, west].some((id) => id && id !== "minecraft:air");
+        if (hasSolidEnclosure) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Handles automatic harvesting and depositing items into nearby chests.
  * Stalk crops retain their base block to allow continuous regrowth.
  */
@@ -1613,7 +1657,8 @@ function processAutoHarvest(dimension: Dimension): void {
                                     const upperBlock = dimension.getBlock({ x: data.x, y: data.y + h, z: data.z });
                                     if (upperBlock) {
                                         if (stalkDef.typeId === "minecraft:kelp") {
-                                            upperBlock.setPermutation(BlockPermutation.resolve("minecraft:water"));
+                                            const revertWater = shouldKelpRevertToWater(dimension, { x: data.x, y: data.y + h, z: data.z });
+                                            upperBlock.setPermutation(BlockPermutation.resolve(revertWater ? "minecraft:water" : "minecraft:air"));
                                         } else {
                                             upperBlock.setPermutation(BlockPermutation.resolve("minecraft:air"));
                                         }
@@ -1967,7 +2012,9 @@ export function initFarmingFeature(): void {
                                 const upperBlock = block.dimension.getBlock({ x: Math.floor(block.location.x), y: bY + h, z: Math.floor(block.location.z) });
                                 if (upperBlock) {
                                     if (stalkDef.typeId === "minecraft:kelp") {
-                                        upperBlock.setPermutation(BlockPermutation.resolve("minecraft:water"));
+                                        const harvestPos = { x: Math.floor(block.location.x), y: bY + h, z: Math.floor(block.location.z) };
+                                        const revertWater = shouldKelpRevertToWater(block.dimension, harvestPos);
+                                        upperBlock.setPermutation(BlockPermutation.resolve(revertWater ? "minecraft:water" : "minecraft:air"));
                                     } else {
                                         upperBlock.setPermutation(BlockPermutation.resolve("minecraft:air"));
                                     }
@@ -2202,7 +2249,14 @@ export function initFarmingFeature(): void {
                     break;
                 }
             }
-            registerStalkCrop(event.dimension.id, { x: cropBlock.location.x, y: bY, z: cropBlock.location.z }, cropBlock.typeId);
+            if (cropBlock.typeId === "minecraft:kelp") {
+                const baseBelow = event.dimension.getBlock({ x: Math.floor(cropBlock.location.x), y: bY - 1, z: Math.floor(cropBlock.location.z) });
+                if (baseBelow && baseBelow.typeId !== "minecraft:air" && baseBelow.typeId !== "minecraft:water") {
+                    registerStalkCrop(event.dimension.id, { x: cropBlock.location.x, y: bY, z: cropBlock.location.z }, cropBlock.typeId);
+                }
+            } else {
+                registerStalkCrop(event.dimension.id, { x: cropBlock.location.x, y: bY, z: cropBlock.location.z }, cropBlock.typeId);
+            }
             return;
         }
 

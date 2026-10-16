@@ -1,6 +1,6 @@
 # Bedrock QoL Suite
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/uNsbXYaQB)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/ZCquc7MzKc)
 
 A modular, high-performance Quality-of-Life add-on for **Minecraft Bedrock Edition (1.21+)** built with the modern Script API (`@minecraft/server`). Designed to reduce repetitive survival micromanagement while maintaining balanced vanilla mechanics.
 

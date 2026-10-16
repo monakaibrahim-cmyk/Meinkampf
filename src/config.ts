@@ -896,14 +896,6 @@ export const InventorySortingConfig = {
     autoSortOnClose: true,
 
     /**
-     * Hit (punch/attack) any container block to open the Sorter menu.
-     * Set to false so punching containers allows breaking/destroying chests normally.
-     * Container sorting options are accessed by equipping the Quick Sorter item and right-clicking the chest.
-     * Default: false
-     */
-    hitContainerToOpenMenu: false,
-
-    /**
      * Interact with ground with empty hand to open backpack sorting.
      * Default: true
      */
