@@ -10,7 +10,9 @@
     },
     "components": {
       "minecraft:icon": {
-        "texture": "qol_quick_sorter"
+        "textures": {
+          "default": "qol_quick_sorter"
+        }
       },
       "minecraft:display_name": {
         "value": "item.qol:quick_sorter.name"

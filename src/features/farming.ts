@@ -236,8 +236,8 @@ export function isLilyPad(typeId?: string): boolean {
  */
 export function getCropFullGrowthTicks(cropTypeId?: string): number {
     const base = 24000;
-    const mult = FarmingConfig.growth.growthRateMultiplier ?? 1.25;
-    return Math.round(base / mult);
+    const mult = FarmingConfig.growth.growthRateMultiplier ?? 3.25;
+    return Math.max(1, Math.round(base / mult));
 }
 
 /**
@@ -260,6 +260,7 @@ export interface TrackedFarmland {
     cropGrowth?: number;
     elapsedTicks?: number;
     ticksPerGrowthStep?: number;
+    playerPlanted?: boolean;
 }
 
 // In-memory registry of active farmlands and farm crops with their planted crop states
@@ -273,7 +274,8 @@ export function registerFarmland(
     pos: Vector3,
     cropTypeId?: string,
     growthStateName?: "growth" | "age",
-    growth?: number
+    growth?: number,
+    playerPlanted?: boolean
 ): void {
     if (isLilyPad(cropTypeId)) return;
 
@@ -282,6 +284,7 @@ export function registerFarmland(
 
     const cropDef = cropTypeId ? SUPPORTED_CROPS[cropTypeId] : undefined;
     const maxGrowth = cropDef?.maxGrowth ?? 7;
+    const isPlayerPlanted = playerPlanted ?? existing?.playerPlanted ?? false;
 
     trackedFarmlands.set(key, {
         x: Math.floor(pos.x),
@@ -294,6 +297,7 @@ export function registerFarmland(
         cropGrowth: growth ?? existing?.cropGrowth,
         elapsedTicks: existing?.elapsedTicks ?? 0,
         ticksPerGrowthStep: calculateTicksPerGrowthStep(maxGrowth, cropTypeId),
+        playerPlanted: isPlayerPlanted,
     });
 }
 
@@ -303,11 +307,13 @@ export function registerFarmland(
 export function registerStalkCrop(
     dimensionId: string,
     pos: Vector3,
-    cropTypeId: string
+    cropTypeId: string,
+    playerPlanted: boolean = false
 ): void {
     const key = `${dimensionId}:${Math.floor(pos.x)},${Math.floor(pos.y)},${Math.floor(pos.z)}`;
     const existing = trackedFarmlands.get(key);
-    if (existing && existing.cropTypeId === cropTypeId) return;
+    const isPlayerPlanted = playerPlanted || (existing?.playerPlanted ?? false);
+    if (existing && existing.cropTypeId === cropTypeId && existing.playerPlanted === isPlayerPlanted) return;
 
     const stalkDef = STALK_CROPS[cropTypeId];
     const steps = stalkDef ? stalkDef.maxHeight - 1 : 2;
@@ -321,6 +327,7 @@ export function registerStalkCrop(
         cropTypeId,
         elapsedTicks: existing?.elapsedTicks ?? 0,
         ticksPerGrowthStep: calculateTicksPerGrowthStep(steps, cropTypeId),
+        playerPlanted: isPlayerPlanted,
     });
 }
 
@@ -330,11 +337,13 @@ export function registerStalkCrop(
 export function registerCaveVines(
     dimensionId: string,
     pos: Vector3,
-    cropTypeId: string = "minecraft:cave_vines"
+    cropTypeId: string = "minecraft:cave_vines",
+    playerPlanted: boolean = false
 ): void {
     const key = `${dimensionId}:${Math.floor(pos.x)},${Math.floor(pos.y)},${Math.floor(pos.z)}`;
     const existing = trackedFarmlands.get(key);
-    if (existing && existing.cropTypeId === cropTypeId) return;
+    const isPlayerPlanted = playerPlanted || (existing?.playerPlanted ?? false);
+    if (existing && existing.cropTypeId === cropTypeId && existing.playerPlanted === isPlayerPlanted) return;
 
     trackedFarmlands.set(key, {
         x: Math.floor(pos.x),
@@ -345,6 +354,7 @@ export function registerCaveVines(
         cropTypeId,
         elapsedTicks: existing?.elapsedTicks ?? 0,
         ticksPerGrowthStep: calculateTicksPerGrowthStep(2, cropTypeId),
+        playerPlanted: isPlayerPlanted,
     });
 }
 
@@ -868,6 +878,7 @@ export function processHarvestReminders(players: Player[]): void {
     const maxDistSq = maxDist * maxDist;
 
     for (const data of trackedFarmlands.values()) {
+        if (!data.playerPlanted) continue;
         const isSelfPos = data.plotType === "cocoa" || data.plotType === "sugar_cane" || data.plotType === "cactus" || data.plotType === "bamboo" || data.plotType === "kelp";
         const cropPos: Vector3 = isSelfPos
             ? { x: data.x, y: data.y, z: data.z }
@@ -1158,7 +1169,7 @@ function processTickProtection(players: Player[]): void {
                 try {
                     const block = dimension.getBlock(checkPos);
                     if (block && block.typeId === "minecraft:farmland") {
-                        registerFarmland(dimension.id, checkPos);
+                        registerFarmland(dimension.id, checkPos, undefined, undefined, undefined, false);
                         const moisture = block.permutation.getState("moisturized_amount") as number ?? 0;
                         if (moisture < 7) {
                             block.setPermutation(block.permutation.withState("moisturized_amount", 7));
@@ -1229,44 +1240,6 @@ function scanFarmlandsInArea(dimension: Dimension, center: Vector3, radius: numb
                         if (moisture < 7) {
                             block.setPermutation(block.permutation.withState("moisturized_amount", 7));
                         }
-                    } else if (block.typeId === "minecraft:sugar_cane") {
-                        const below = dimension.getBlock({ x, y: y - 1, z });
-                        if (!below || below.typeId !== "minecraft:sugar_cane") {
-                            registerStalkCrop(dimension.id, { x, y, z }, "minecraft:sugar_cane");
-                        }
-                    } else if (block.typeId === "minecraft:cactus") {
-                        const below = dimension.getBlock({ x, y: y - 1, z });
-                        if (!below || below.typeId !== "minecraft:cactus") {
-                            registerStalkCrop(dimension.id, { x, y, z }, "minecraft:cactus");
-                        }
-                    } else if (block.typeId === "minecraft:bamboo") {
-                        const below = dimension.getBlock({ x, y: y - 1, z });
-                        if (!below || below.typeId !== "minecraft:bamboo") {
-                            registerStalkCrop(dimension.id, { x, y, z }, "minecraft:bamboo");
-                        }
-                    } else if (block.typeId === "minecraft:kelp" || block.typeId === "minecraft:kelp_plant") {
-                        const below = dimension.getBlock({ x, y: y - 1, z });
-                        if (!below || (below.typeId !== "minecraft:kelp" && below.typeId !== "minecraft:kelp_plant")) {
-                            // Only register kelp if planted on solid ground submerged in water (never in air)
-                            if (below && below.typeId !== "minecraft:air" && below.typeId !== "minecraft:water") {
-                                const above = dimension.getBlock({ x, y: y + 1, z });
-                                if (above && (above.typeId === "minecraft:water" || above.typeId === "minecraft:kelp" || above.typeId === "minecraft:kelp_plant")) {
-                                    registerStalkCrop(dimension.id, { x, y, z }, "minecraft:kelp");
-                                }
-                            }
-                        }
-                    } else if (block.typeId === "minecraft:cocoa") {
-                        registerFarmland(dimension.id, pos, "minecraft:cocoa", "age", block.permutation.getState("age") as number ?? 0);
-                    } else if (block.typeId === "minecraft:sweet_berry_bush") {
-                        const groundPos: Vector3 = { x, y: y - 1, z };
-                        const growthVal = block.permutation.getState("growth") as number ?? 0;
-                        registerFarmland(dimension.id, groundPos, "minecraft:sweet_berry_bush", "growth", growthVal);
-                    } else if (
-                        block.typeId === "minecraft:cave_vines" ||
-                        block.typeId === "minecraft:cave_vines_head_with_berries" ||
-                        block.typeId === "minecraft:cave_vines_body_with_berries"
-                    ) {
-                        registerCaveVines(dimension.id, pos, block.typeId);
                     }
                 } catch {
                     // Chunk not loaded
@@ -1319,6 +1292,11 @@ function processFastGrowth(dimension: Dimension): void {
 
     for (const data of trackedFarmlands.values()) {
         if (data.dimensionId !== dimension.id) continue;
+
+        // Strictly exempt naturally generated crops: only player-planted crops receive accelerated growth
+        if (!data.playerPlanted) {
+            continue;
+        }
 
         // Skip crops that are exempt, such as lily pads
         if (isLilyPad(data.cropTypeId)) {
@@ -1563,7 +1541,7 @@ function processFastGrowth(dimension: Dimension): void {
                         if (belowBlock && belowBlock.isAir) {
                             vineBlock.setPermutation(BlockPermutation.resolve("minecraft:cave_vines_body_with_berries"));
                             belowBlock.setPermutation(BlockPermutation.resolve("minecraft:cave_vines"));
-                            registerCaveVines(dimension.id, belowPos, "minecraft:cave_vines");
+                            registerCaveVines(dimension.id, belowPos, "minecraft:cave_vines", true);
                             data.elapsedTicks = Math.max(0, data.elapsedTicks - targetStepTicks);
                             if (showGrowthParticles) {
                                 try {
@@ -1636,6 +1614,7 @@ function processAutoHarvest(dimension: Dimension): void {
 
     for (const data of trackedFarmlands.values()) {
         if (data.dimensionId !== dimension.id) continue;
+        if (!data.playerPlanted) continue;
         const fullCycleTicks = getCropFullGrowthTicks(data.cropTypeId);
 
         try {
@@ -1950,6 +1929,9 @@ export function initFarmingFeature(): void {
                     if (tracked) {
                         tracked.cropTypeId = "minecraft:cave_vines";
                         tracked.elapsedTicks = 0;
+                        tracked.playerPlanted = true;
+                    } else {
+                        registerCaveVines(block.dimension.id, block.location, "minecraft:cave_vines", true);
                     }
                     return;
                 } catch {
@@ -1968,8 +1950,9 @@ export function initFarmingFeature(): void {
                         if (tracked) {
                             tracked.cropGrowth = 0;
                             tracked.elapsedTicks = 0;
+                            tracked.playerPlanted = true;
                         } else {
-                            registerFarmland(block.dimension.id, block.location, "minecraft:cocoa", "age", 0);
+                            registerFarmland(block.dimension.id, block.location, "minecraft:cocoa", "age", 0, true);
                         }
 
                         block.dimension.spawnItem(
@@ -2051,6 +2034,9 @@ export function initFarmingFeature(): void {
                             const tracked = trackedFarmlands.get(baseKey);
                             if (tracked) {
                                 tracked.elapsedTicks = 0;
+                                tracked.playerPlanted = true;
+                            } else {
+                                registerStalkCrop(block.dimension.id, { x: Math.floor(block.location.x), y: bY, z: Math.floor(block.location.z) }, stalkDef.typeId, true);
                             }
 
                             try {
@@ -2093,13 +2079,15 @@ export function initFarmingFeature(): void {
                         if (tracked) {
                             tracked.cropGrowth = cropDef.replantGrowth;
                             tracked.elapsedTicks = 0;
+                            tracked.playerPlanted = true;
                         } else {
                             registerFarmland(
                                 block.dimension.id,
                                 groundPos,
                                 cropDef.typeId,
                                 cropDef.growthStateName,
-                                cropDef.replantGrowth
+                                cropDef.replantGrowth,
+                                true
                             );
                         }
 
@@ -2157,7 +2145,7 @@ export function initFarmingFeature(): void {
                 try {
                     const updatedBlock = block.dimension.getBlock(block.location);
                     if (updatedBlock && updatedBlock.typeId === "minecraft:farmland") {
-                        registerFarmland(block.dimension.id, block.location);
+                        registerFarmland(block.dimension.id, block.location, undefined, undefined, undefined, true);
                         updatedBlock.setPermutation(
                             BlockPermutation.resolve("minecraft:farmland", { moisturized_amount: 7 })
                         );
@@ -2233,7 +2221,7 @@ export function initFarmingFeature(): void {
         }
 
         if (cropBlock.typeId === "minecraft:cocoa") {
-            registerFarmland(event.dimension.id, cropBlock.location, "minecraft:cocoa", "age", 0);
+            registerFarmland(event.dimension.id, cropBlock.location, "minecraft:cocoa", "age", 0, true);
             return;
         }
 
@@ -2243,7 +2231,7 @@ export function initFarmingFeature(): void {
                 y: Math.floor(cropBlock.location.y - 1),
                 z: Math.floor(cropBlock.location.z),
             };
-            registerFarmland(event.dimension.id, groundPos, "minecraft:sweet_berry_bush", "growth", 0);
+            registerFarmland(event.dimension.id, groundPos, "minecraft:sweet_berry_bush", "growth", 0, true);
             return;
         }
 
@@ -2252,7 +2240,7 @@ export function initFarmingFeature(): void {
             cropBlock.typeId === "minecraft:cave_vines_head_with_berries" ||
             cropBlock.typeId === "minecraft:cave_vines_body_with_berries"
         ) {
-            registerCaveVines(event.dimension.id, cropBlock.location, cropBlock.typeId);
+            registerCaveVines(event.dimension.id, cropBlock.location, cropBlock.typeId, true);
             return;
         }
 
@@ -2270,10 +2258,10 @@ export function initFarmingFeature(): void {
             if (cropBlock.typeId === "minecraft:kelp") {
                 const baseBelow = event.dimension.getBlock({ x: Math.floor(cropBlock.location.x), y: bY - 1, z: Math.floor(cropBlock.location.z) });
                 if (baseBelow && baseBelow.typeId !== "minecraft:air" && baseBelow.typeId !== "minecraft:water") {
-                    registerStalkCrop(event.dimension.id, { x: cropBlock.location.x, y: bY, z: cropBlock.location.z }, cropBlock.typeId);
+                    registerStalkCrop(event.dimension.id, { x: cropBlock.location.x, y: bY, z: cropBlock.location.z }, cropBlock.typeId, true);
                 }
             } else {
-                registerStalkCrop(event.dimension.id, { x: cropBlock.location.x, y: bY, z: cropBlock.location.z }, cropBlock.typeId);
+                registerStalkCrop(event.dimension.id, { x: cropBlock.location.x, y: bY, z: cropBlock.location.z }, cropBlock.typeId, true);
             }
             return;
         }
@@ -2286,7 +2274,11 @@ export function initFarmingFeature(): void {
 
         try {
             const groundBlock = event.dimension.getBlock(groundPos);
-            if (groundBlock && groundBlock.typeId === "minecraft:farmland") {
+            const isFarmland = groundBlock && groundBlock.typeId === "minecraft:farmland";
+            const isSoulSand = groundBlock && (groundBlock.typeId === "minecraft:soul_sand" || groundBlock.typeId === "minecraft:soul_soil");
+            const isValidSoil = isFarmland || (cropBlock.typeId === "minecraft:nether_wart" && isSoulSand);
+
+            if (isValidSoil) {
                 if (isLilyPad(cropBlock.typeId)) return;
 
                 const cropDef = SUPPORTED_CROPS[cropBlock.typeId];
@@ -2305,11 +2297,14 @@ export function initFarmingFeature(): void {
                     groundPos,
                     cropBlock.typeId,
                     growthName,
-                    0
+                    0,
+                    true
                 );
-                groundBlock.setPermutation(
-                    BlockPermutation.resolve("minecraft:farmland", { moisturized_amount: 7 })
-                );
+                if (isFarmland && groundBlock) {
+                    groundBlock.setPermutation(
+                        BlockPermutation.resolve("minecraft:farmland", { moisturized_amount: 7 })
+                    );
+                }
             }
         } catch {
             // Ignore
@@ -2424,7 +2419,8 @@ export function initFarmingFeature(): void {
                                 groundPos,
                                 cropDef.typeId,
                                 cropDef.growthStateName,
-                                cropDef.replantGrowth
+                                cropDef.replantGrowth,
+                                true
                             );
 
                             try {
@@ -2449,6 +2445,7 @@ export function initFarmingFeature(): void {
                 if (tracked) {
                     tracked.cropTypeId = undefined;
                     tracked.cropGrowth = undefined;
+                    tracked.playerPlanted = false;
                 }
             }
         } else if (brokenId.includes("stem")) {
@@ -2457,6 +2454,7 @@ export function initFarmingFeature(): void {
             if (tracked) {
                 tracked.cropTypeId = undefined;
                 tracked.cropGrowth = undefined;
+                tracked.playerPlanted = false;
             }
         }
     });
