@@ -588,10 +588,10 @@ export const MobHealthBarConfig = {
     showPassiveMobs: true,
 
     /**
-     * Number of segments in the health bar gauge (matches 4-segment card template).
-     * Default: 4
+     * Number of segments in the health bar gauge (10 segments forms a continuous 86-pixel bar).
+     * Default: 10
      */
-    gaugeSegments: 4,
+    gaugeSegments: 10,
 
     /**
      * Show numeric HP value (e.g. "14/20 HP").

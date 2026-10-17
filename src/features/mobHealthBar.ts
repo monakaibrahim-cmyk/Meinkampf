@@ -251,8 +251,8 @@ export function getMobNameHeader(entity: Entity): { name: string; color: string 
  *   Filled:      U+E100 + 4 + (color * 4 + shape) * GAUGE_LEVELS + (level - 1)
  */
 const GLYPH_BASE = 0xe100;
-/** Fill steps (pixel columns) per segment glyph. */
-const GAUGE_LEVELS = 15;
+/** Fill steps (pixel columns) per segment glyph (16 columns: 0..15). */
+const GAUGE_LEVELS = 16;
 const enum GaugeColor {
     Green = 0,
     Amber = 1,
@@ -266,7 +266,7 @@ const enum GaugeShape {
 }
 
 /** Approximate on-screen width (font pixels) of one gauge segment glyph. */
-const SEGMENT_PX = 9;
+const SEGMENT_PX = 8.6;
 
 /** Returns the glyph for one segment filled `level` (0..GAUGE_LEVELS) pixel columns. */
 function gaugeGlyph(color: GaugeColor, shape: GaugeShape, level: number): string {
@@ -285,16 +285,15 @@ function segmentShape(index: number, total: number): GaugeShape {
 }
 
 /**
- * Builds the modern segmented health bar gauge matching the template design.
- * The fill is proportional to HP at 1-pixel precision (segments drain partially),
- * colored by remaining health:
+ * Builds the modern continuous health bar gauge matching the template card design.
+ * The fill is proportional to HP at 1-pixel precision, colored by remaining health:
  * - Green (ratio > 0.50)
- * - Amber (0.25 < ratio <= 0.50)
+ * - Amber/Yellow (0.25 < ratio <= 0.50)
  * - Red (ratio <= 0.25)
  * Unfilled portions are rendered as a dark track.
- * Uses custom resource-pack glyphs (rounded pill segments with thin gaps).
+ * Segments connect seamlessly without gaps to produce a single continuous bar.
  */
-export function buildSegmentedGauge(currentHp: number, maxHp: number, totalSegments: number = 4): string {
+export function buildSegmentedGauge(currentHp: number, maxHp: number, totalSegments: number = 10): string {
     const safeMax = Math.max(1, maxHp);
     const ratio = Math.max(0, Math.min(1, currentHp / safeMax));
     const segmentsTotal = Math.max(1, Math.floor(totalSegments));
@@ -347,7 +346,7 @@ function textPixelWidth(text: string): number {
 /**
  * Formats Line 1 of the mob health card:
  * Left: White mob name (§fMobName)
- * Right: Numeric HP fraction (e.g. §f20§7/20, or §c3§7/20 on low health)
+ * Right: Numeric HP fraction matching gauge color (e.g. §a20§7/20, §e9§7/20, or §c3§7/20)
  */
 export function formatMobCardHeader(mobName: string, currentHp: number, maxHp: number): string {
     const safeMax = Math.max(1, maxHp);
@@ -356,8 +355,13 @@ export function formatMobCardHeader(mobName: string, currentHp: number, maxHp: n
     const curVal = Math.ceil(currentHp);
     const maxVal = Math.round(maxHp);
 
-    // Current HP turns red when critical (<= 25%), otherwise white
-    const curColor = ratio <= 0.25 ? "§c" : "§f";
+    // Current HP color matching the gauge: Green (> 50%), Yellow (25%-50%), Red (<= 25%)
+    let curColor = "§a";
+    if (ratio <= 0.25) {
+        curColor = "§c";
+    } else if (ratio <= 0.5) {
+        curColor = "§e";
+    }
     const hpFraction = MobHealthBarConfig.showHpValue ? `${curColor}${curVal}§7/${maxVal}` : "";
 
     if (!MobHealthBarConfig.showMobName) {
@@ -368,8 +372,8 @@ export function formatMobCardHeader(mobName: string, currentHp: number, maxHp: n
         return `§f${mobName}`;
     }
 
-    // Pad so the name sits flush-left and HP flush-right above the gauge
-    const barWidth = Math.max(1, MobHealthBarConfig.gaugeSegments) * SEGMENT_PX;
+    // Pad so the name sits flush-left and HP flush-right above the continuous gauge
+    const barWidth = Math.max(1, MobHealthBarConfig.gaugeSegments ?? 10) * SEGMENT_PX;
     const contentWidth = textPixelWidth(mobName) + textPixelWidth(`${curVal}/${maxVal}`);
     const spaceCount = Math.max(2, Math.round((barWidth - contentWidth) / 4));
     const padding = " ".repeat(spaceCount);
@@ -385,7 +389,12 @@ export function formatHpValue(currentHp: number, maxHp: number): string {
     const ratio = Math.max(0, Math.min(1, currentHp / safeMax));
     const curVal = Math.ceil(currentHp);
     const maxVal = Math.round(maxHp);
-    const curColor = ratio <= 0.25 ? "§c" : "§f";
+    let curColor = "§a";
+    if (ratio <= 0.25) {
+        curColor = "§c";
+    } else if (ratio <= 0.5) {
+        curColor = "§e";
+    }
     return `${curColor}${curVal}§7/${maxVal}`;
 }
 
