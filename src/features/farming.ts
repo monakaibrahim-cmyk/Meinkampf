@@ -217,21 +217,24 @@ export const STEM_CROPS = {
 };
 
 /**
+ * Checks if a block type is a lily pad (strictly exempt from crop growth and farmland registration).
+ */
+export function isLilyPad(typeId?: string): boolean {
+    if (!typeId) return false;
+    return (
+        typeId === "minecraft:waterlily" ||
+        typeId === "minecraft:lily_pad" ||
+        typeId.includes("waterlily") ||
+        typeId.includes("lily_pad")
+    );
+}
+
+/**
  * Returns total ticks required for a crop to grow from planting to full maturity.
- * Standard crops: default 24,000 ticks (1 Minecraft day) with 1.25x rate = 19,200 ticks (16 minutes).
- * Sweet Berry Bush and Glow Berries: exempt from default, using rapid 100 ticks (5 seconds).
+ * Default 24,000 ticks (1 Minecraft day) scaled by growthRateMultiplier.
+ * All crops (including Sweet Berry Bush and Glow Berries) are scaled uniformly.
  */
 export function getCropFullGrowthTicks(cropTypeId?: string): number {
-    const isBerry =
-        cropTypeId === "minecraft:sweet_berry_bush" ||
-        cropTypeId === "minecraft:cave_vines" ||
-        cropTypeId === "minecraft:cave_vines_body_with_berries" ||
-        cropTypeId === "minecraft:cave_vines_head_with_berries";
-
-    if (isBerry && FarmingConfig.growth.berriesFastGrowth) {
-        return FarmingConfig.growth.berriesFullGrowthTicks ?? 100;
-    }
-
     const base = 24000;
     const mult = FarmingConfig.growth.growthRateMultiplier ?? 1.25;
     return Math.round(base / mult);
@@ -272,6 +275,8 @@ export function registerFarmland(
     growthStateName?: "growth" | "age",
     growth?: number
 ): void {
+    if (isLilyPad(cropTypeId)) return;
+
     const key = `${dimensionId}:${Math.floor(pos.x)},${Math.floor(pos.y)},${Math.floor(pos.z)}`;
     const existing = trackedFarmlands.get(key);
 
@@ -1048,6 +1053,8 @@ export function isFarmProtected(block: Block): boolean {
  * Restores farmland and replants crops when trampled or dehydrated.
  */
 function restoreFarmlandAndCrop(dimension: Dimension, data: TrackedFarmland): void {
+    if (isLilyPad(data.cropTypeId)) return;
+
     const farmlandPos: Vector3 = { x: data.x, y: data.y, z: data.z };
     const cropPos: Vector3 = { x: data.x, y: data.y + 1, z: data.z };
 
@@ -1181,6 +1188,8 @@ function scanFarmlandsInArea(dimension: Dimension, center: Vector3, radius: numb
                     const block = dimension.getBlock(pos);
                     if (!block) continue;
 
+                    if (isLilyPad(block.typeId)) continue;
+
                     // Automatically index chests into knownChests
                     if (
                         block.typeId === "minecraft:chest" ||
@@ -1198,7 +1207,7 @@ function scanFarmlandsInArea(dimension: Dimension, center: Vector3, radius: numb
                         let growthName: "growth" | "age" | undefined;
                         let growthVal: number | undefined;
 
-                        if (cropBlock && !cropBlock.isAir) {
+                        if (cropBlock && !cropBlock.isAir && !isLilyPad(cropBlock.typeId)) {
                             const cropDef = SUPPORTED_CROPS[cropBlock.typeId];
                             if (cropDef) {
                                 cropTypeId = cropBlock.typeId;
@@ -1306,10 +1315,16 @@ function processFastGrowth(dimension: Dimension): void {
     if (!FarmingConfig.growth.fastGrowth) return;
 
     const { showGrowthParticles } = FarmingConfig.growth;
-    const checkInterval = FarmingConfig.growth.growthCheckIntervalTicks ?? 100;
+    const checkInterval = 100;
 
     for (const data of trackedFarmlands.values()) {
         if (data.dimensionId !== dimension.id) continue;
+
+        // Skip crops that are exempt, such as lily pads
+        if (isLilyPad(data.cropTypeId)) {
+            unregisterFarmland(data.dimensionId, { x: data.x, y: data.y, z: data.z });
+            continue;
+        }
 
         // Skip crops that are already fully mature to avoid redundant block lookups
         const knownDef = data.cropTypeId ? SUPPORTED_CROPS[data.cropTypeId] : undefined;
@@ -1409,7 +1424,7 @@ function processFastGrowth(dimension: Dimension): void {
             // 4. Standard crops on farmland (Wheat, Carrots, Potatoes, Beetroot, Nether Wart, Sweet Berries, Pitcher, Torchflower)
             const cropPos: Vector3 = { x: data.x, y: data.y + 1, z: data.z };
             const cropBlock = dimension.getBlock(cropPos);
-            if (!cropBlock) continue;
+            if (!cropBlock || isLilyPad(cropBlock.typeId)) continue;
 
             const cropDef = SUPPORTED_CROPS[cropBlock.typeId];
             if (cropDef) {
@@ -1907,6 +1922,8 @@ export function initFarmingFeature(): void {
 
         // a) Right-click Harvest on mature crops
         if (FarmingConfig.autoHarvest.rightClickHarvest && block) {
+            if (isLilyPad(block.typeId)) return;
+
             // Check Cave Vines with Glow Berries
             if (
                 block.typeId === "minecraft:cave_vines_head_with_berries" ||
@@ -2155,6 +2172,7 @@ export function initFarmingFeature(): void {
     // 2. Crop & Farm Container Planting Listener: registers crops, chests, and signs
     world.afterEvents.playerPlaceBlock.subscribe((event: PlayerPlaceBlockAfterEvent) => {
         const cropBlock = event.block;
+        if (isLilyPad(cropBlock.typeId)) return;
 
         // Auto-register placed containers and refresh crop cache
         if (
@@ -2269,7 +2287,17 @@ export function initFarmingFeature(): void {
         try {
             const groundBlock = event.dimension.getBlock(groundPos);
             if (groundBlock && groundBlock.typeId === "minecraft:farmland") {
+                if (isLilyPad(cropBlock.typeId)) return;
+
                 const cropDef = SUPPORTED_CROPS[cropBlock.typeId];
+                const isStem =
+                    cropBlock.typeId === STEM_CROPS.melon.stemTypeId ||
+                    cropBlock.typeId === STEM_CROPS.pumpkin.stemTypeId;
+
+                if (!cropDef && !isStem) {
+                    return;
+                }
+
                 const growthName = cropDef ? cropDef.growthStateName : "growth";
 
                 registerFarmland(
@@ -2319,6 +2347,8 @@ export function initFarmingFeature(): void {
     //    Handles manual crop harvesting (with auto-replant), chest/sign removal, and farmland unregistration
     world.afterEvents.playerBreakBlock.subscribe((event: PlayerBreakBlockAfterEvent) => {
         const brokenId = event.brokenBlockPermutation.type.id;
+        if (isLilyPad(brokenId)) return;
+
         const dimId = event.dimension.id;
         const loc = event.block.location;
         const player = event.player;
@@ -2461,9 +2491,9 @@ export function initFarmingFeature(): void {
         }
     }, 100);
 
-    // 7. Fast Growth Loop (Every growthCheckIntervalTicks)
-    // Processes all loaded dimensions so crops grow even if players are in the Nether or far away
-    const growthTicks = Math.max(10, FarmingConfig.growth.growthCheckIntervalTicks);
+    // 7. Fast Growth Loop (Every 100 ticks = 5 seconds)
+    // Processes all loaded dimensions so crops grow safely and consistently without lag spikes
+    const growthTicks = 100;
     system.runInterval(() => {
         const players = Array.from(world.getAllPlayers());
         if (players.length === 0) return;

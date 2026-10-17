@@ -195,30 +195,12 @@ export const FarmingConfig = {
         fastGrowth: true,
 
         /**
-         * Growth rate multiplier applied to default crops (1.25 = 125% speed, 25% faster than default; 2 = 200% speed).
+         * Growth rate multiplier applied to all crops (including Sweet Berry Bush and Glow Berries).
+         * (1.25 = 125% speed, 25% faster than default; 2 = 200% speed, twice as fast).
          * Standard crops take 24,000 / growthRateMultiplier ticks to grow to maturity.
-         * Default: 2
+         * Default: 1.25
          */
-        growthRateMultiplier: 2,
-
-        /**
-         * Sweet Berry Bush and Glow Berries are exempt from default rate and use fast growth.
-         * Default: true
-         */
-        berriesFastGrowth: true,
-
-        /**
-         * Target growth duration for Sweet Berry Bush and Glow Berries (in game ticks).
-         * 100 ticks = 5.0 seconds (rapid berry yield for foraging and farming).
-         * Default: 100
-         */
-        berriesFullGrowthTicks: 100,
-
-        /**
-         * Tick interval for the crop growth loop (20 ticks = 1.0 second).
-         * Default: 20 ticks
-         */
-        growthCheckIntervalTicks: 20,
+        growthRateMultiplier: 1.25,
 
         /**
          * Number of growth stages to advance per growth cycle.
